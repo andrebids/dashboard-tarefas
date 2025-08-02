@@ -123,6 +123,13 @@ class PlankaManager:
             Status: "online", "offline", "erro"
         """
         try:
+            # Primeiro verificar qual modo está ativo
+            modo_ativo = self.verificar_modo_ativo()
+            
+            if modo_ativo == "nenhum":
+                self.status = "offline"
+                return "offline"
+            
             # Tentar conectar na URL do Planka
             response = requests.get(
                 self.planka_url, 
@@ -143,6 +150,29 @@ class PlankaManager:
         except Exception as e:
             self.status = "erro"
             return "erro"
+    
+    def verificar_modo_ativo(self) -> str:
+        """
+        Verifica qual modo está ativo (produção ou desenvolvimento).
+        
+        Returns:
+            "producao", "desenvolvimento", "nenhum"
+        """
+        try:
+            # Usar o método mais preciso para verificar containers ativos
+            containers_ativos = self.verificar_containers_ativos()
+            
+            # Priorizar modo desenvolvimento se ambos estiverem ativos
+            if containers_ativos["desenvolvimento"]:
+                return "desenvolvimento"
+            elif containers_ativos["producao"]:
+                return "producao"
+            else:
+                return "nenhum"
+                
+        except Exception as e:
+            print(f"Erro ao verificar modo ativo: {e}")
+            return "nenhum"
     
     def verificar_processos_docker(self) -> List[Dict]:
         """
@@ -178,6 +208,65 @@ class PlankaManager:
             print(f"Erro ao verificar processos Docker: {e}")
             
         return processos
+    
+    def verificar_containers_ativos(self) -> Dict[str, bool]:
+        """
+        Verifica quais containers estão ativos em cada modo.
+        
+        Returns:
+            Dict com status de cada modo
+        """
+        status = {
+            "producao": False,
+            "desenvolvimento": False
+        }
+        
+        try:
+            # Verificar containers de produção
+            resultado_prod = subprocess.run(
+                ["docker-compose", "-f", "docker-compose-local.yml", "ps"],
+                cwd=self.planka_dir,
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            
+            if resultado_prod.returncode == 0:
+                # Verificar se o container planka está rodando
+                linhas_prod = resultado_prod.stdout.strip().split('\n')
+                for linha in linhas_prod:
+                    if "planka-personalizado-planka-1" in linha and "Up" in linha:
+                        status["producao"] = True
+                        break
+            
+            # Verificar containers de desenvolvimento
+            resultado_dev = subprocess.run(
+                ["docker-compose", "-f", "docker-compose-dev.yml", "ps"],
+                cwd=self.planka_dir,
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            
+            if resultado_dev.returncode == 0:
+                # Verificar se os containers específicos do desenvolvimento estão rodando
+                linhas_dev = resultado_dev.stdout.strip().split('\n')
+                server_rodando = False
+                client_rodando = False
+                
+                for linha in linhas_dev:
+                    if "planka-personalizado-planka-server-1" in linha and "Up" in linha:
+                        server_rodando = True
+                    elif "planka-personalizado-planka-client-1" in linha and "Up" in linha:
+                        client_rodando = True
+                
+                if server_rodando and client_rodando:
+                    status["desenvolvimento"] = True
+                    
+        except Exception as e:
+            print(f"Erro ao verificar containers ativos: {e}")
+            
+        return status
     
     def iniciar_planka(self) -> Tuple[bool, str]:
         """
@@ -288,43 +377,55 @@ class PlankaManager:
     
     def modo_desenvolvimento(self) -> Tuple[bool, str]:
         """
-        Inicia o Planka em modo desenvolvimento.
+        Inicia o Planka em modo desenvolvimento usando docker-compose-dev.yml.
         
         Returns:
             (sucesso, mensagem)
         """
         try:
-            # Verificar se Node.js está disponível
+            # Verificar se Docker está disponível
             dependencias = self.verificar_dependencias()
-            if not dependencias["nodejs"]:
-                return False, "Node.js não encontrado"
+            if not dependencias["docker"]:
+                return False, "Docker não encontrado"
             
-            # Verificar se package.json existe
-            package_json = self.planka_dir / "package.json"
-            if not package_json.exists():
-                return False, "package.json não encontrado"
+            if not dependencias["docker_compose"]:
+                return False, "Docker Compose não encontrado"
             
-            # Parar containers Docker se estiverem rodando
+            # Verificar se o diretório existe
+            if not self.verificar_diretorio_planka():
+                return False, "Diretório do Planka não encontrado"
+            
+            # Verificar se docker-compose-dev.yml existe
+            dev_compose_file = self.planka_dir / "docker-compose-dev.yml"
+            if not dev_compose_file.exists():
+                return False, "docker-compose-dev.yml não encontrado"
+            
+            # Parar containers de produção se estiverem rodando
             self.parar_planka()
             
-            # Iniciar em modo desenvolvimento
-            self.dev_process = subprocess.Popen(
-                ["npm", "start"],
+            # Iniciar modo desenvolvimento
+            resultado = subprocess.run(
+                ["docker-compose", "-f", "docker-compose-dev.yml", "up", "-d"],
                 cwd=self.planka_dir,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True
+                capture_output=True,
+                text=True,
+                timeout=60
             )
             
-            # Aguardar inicialização
-            time.sleep(15)
-            
-            # Verificar se iniciou
-            if self.verificar_status() == "online":
-                return True, "Planka iniciado em modo desenvolvimento"
-            else:
-                return False, "Planka não iniciou em modo desenvolvimento"
+            if resultado.returncode == 0:
+                # Aguardar inicialização
+                time.sleep(10)
                 
+                # Verificar se iniciou
+                if self.verificar_status() == "online":
+                    return True, "Planka iniciado em modo desenvolvimento"
+                else:
+                    return False, "Planka não iniciou em modo desenvolvimento"
+            else:
+                return False, f"Erro ao iniciar modo desenvolvimento: {resultado.stderr}"
+                
+        except subprocess.TimeoutExpired:
+            return False, "Timeout ao iniciar modo desenvolvimento"
         except Exception as e:
             return False, f"Erro ao iniciar modo desenvolvimento: {str(e)}"
     
@@ -336,18 +437,26 @@ class PlankaManager:
             (sucesso, mensagem)
         """
         try:
-            if self.dev_process:
-                self.dev_process.terminate()
-                self.dev_process.wait(timeout=10)
-                self.dev_process = None
+            # Verificar se docker-compose-dev.yml existe
+            dev_compose_file = self.planka_dir / "docker-compose-dev.yml"
+            if not dev_compose_file.exists():
+                return False, "docker-compose-dev.yml não encontrado"
+            
+            # Parar containers de desenvolvimento
+            resultado = subprocess.run(
+                ["docker-compose", "-f", "docker-compose-dev.yml", "down"],
+                cwd=self.planka_dir,
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            
+            if resultado.returncode == 0:
                 return True, "Modo desenvolvimento parado"
             else:
-                return True, "Nenhum processo de desenvolvimento ativo"
+                return False, f"Erro ao parar modo desenvolvimento: {resultado.stderr}"
                 
         except subprocess.TimeoutExpired:
-            if self.dev_process:
-                self.dev_process.kill()
-                self.dev_process = None
             return False, "Timeout ao parar modo desenvolvimento"
         except Exception as e:
             return False, f"Erro ao parar modo desenvolvimento: {str(e)}"
@@ -439,4 +548,163 @@ class PlankaManager:
             "timestamp": datetime.now().isoformat()
         }
         
-        return info 
+        return info
+    
+    def diagnostico_detalhado(self) -> Dict:
+        """
+        Executa um diagnóstico detalhado do sistema Planka.
+        
+        Returns:
+            Dict com resultados do diagnóstico
+        """
+        diagnostico = {
+            "timestamp": datetime.now().isoformat(),
+            "dependencias": {},
+            "diretorio": {},
+            "docker": {},
+            "conectividade": {},
+            "logs": {},
+            "problemas": [],
+            "sugestoes": []
+        }
+        
+        try:
+            # 1. Verificar dependências
+            dependencias = self.verificar_dependencias()
+            diagnostico["dependencias"] = dependencias
+            
+            for dep, status in dependencias.items():
+                if not status:
+                    diagnostico["problemas"].append(f"Dependência {dep} não encontrada")
+                    if dep == "docker":
+                        diagnostico["sugestoes"].append("Instale o Docker Desktop")
+                    elif dep == "docker_compose":
+                        diagnostico["sugestoes"].append("Instale o Docker Compose")
+                    elif dep == "nodejs":
+                        diagnostico["sugestoes"].append("Instale o Node.js")
+                    elif dep == "git":
+                        diagnostico["sugestoes"].append("Instale o Git")
+            
+            # 2. Verificar diretório
+            dir_valido = self.verificar_diretorio_planka()
+            diagnostico["diretorio"]["valido"] = dir_valido
+            diagnostico["diretorio"]["caminho"] = str(self.planka_dir)
+            
+            if not dir_valido:
+                diagnostico["problemas"].append("Diretório do Planka não encontrado ou inválido")
+                diagnostico["sugestoes"].append("Use 'Descarregar Planka' para baixar o repositório")
+            else:
+                # Verificar arquivos importantes
+                arquivos_importantes = [
+                    "docker-compose.yml",
+                    "docker-compose-local.yml",
+                    "docker-compose-dev.yml",
+                    "package.json"
+                ]
+                
+                arquivos_faltando = []
+                for arquivo in arquivos_importantes:
+                    if not (self.planka_dir / arquivo).exists():
+                        arquivos_faltando.append(arquivo)
+                
+                if arquivos_faltando:
+                    diagnostico["problemas"].append(f"Arquivos importantes faltando: {', '.join(arquivos_faltando)}")
+                    diagnostico["sugestoes"].append("Reinstale o repositório do Planka")
+            
+            # 3. Verificar Docker
+            processos = self.verificar_processos_docker()
+            diagnostico["docker"]["processos"] = processos
+            
+            if not processos:
+                diagnostico["problemas"].append("Nenhum processo Docker do Planka encontrado")
+                diagnostico["sugestoes"].append("Inicie o Planka usando 'Iniciar Planka' ou 'Modo Desenvolvimento'")
+            
+            # 4. Verificar conectividade
+            try:
+                response = requests.get(self.planka_url, timeout=5)
+                diagnostico["conectividade"]["status_code"] = response.status_code
+                diagnostico["conectividade"]["acessivel"] = response.status_code == 200
+                
+                if response.status_code != 200:
+                    diagnostico["problemas"].append(f"Planka retornou status HTTP {response.status_code}")
+                    diagnostico["sugestoes"].append("Verifique se o Planka está iniciando corretamente")
+                    
+            except requests.RequestException as e:
+                diagnostico["conectividade"]["erro"] = str(e)
+                diagnostico["conectividade"]["acessivel"] = False
+                diagnostico["problemas"].append(f"Erro de conectividade: {str(e)}")
+                diagnostico["sugestoes"].append("Verifique se o Planka está rodando e acessível")
+            
+            # 5. Verificar logs
+            try:
+                logs = self.obter_logs(linhas=50)
+                diagnostico["logs"]["disponivel"] = True
+                diagnostico["logs"]["tamanho"] = len(logs)
+                
+                # Procurar por erros nos logs
+                erros_log = []
+                linhas_log = logs.split('\n')
+                for linha in linhas_log:
+                    if any(palavra in linha.lower() for palavra in ['error', 'erro', 'failed', 'exception', 'fatal']):
+                        erros_log.append(linha.strip())
+                
+                if erros_log:
+                    diagnostico["logs"]["erros"] = erros_log[-5:]  # Últimos 5 erros
+                    diagnostico["problemas"].append(f"Encontrados {len(erros_log)} erros nos logs")
+                    diagnostico["sugestoes"].append("Verifique os logs detalhados para identificar o problema")
+                else:
+                    diagnostico["logs"]["erros"] = []
+                    
+            except Exception as e:
+                diagnostico["logs"]["disponivel"] = False
+                diagnostico["logs"]["erro"] = str(e)
+                diagnostico["problemas"].append("Não foi possível obter logs")
+            
+            # 6. Verificar status geral
+            status = self.verificar_status()
+            modo_ativo = self.verificar_modo_ativo()
+            
+            diagnostico["status_geral"] = {
+                "status": status,
+                "modo_ativo": modo_ativo
+            }
+            
+            if status != "online":
+                diagnostico["problemas"].append("Planka não está online")
+                if status == "offline":
+                    diagnostico["sugestoes"].append("Inicie o Planka usando 'Iniciar Planka'")
+                else:
+                    diagnostico["sugestoes"].append("Verifique se há erros na inicialização")
+            
+            # 7. Verificar recursos do sistema
+            try:
+                # Verificar uso de memória dos containers
+                result = subprocess.run(
+                    ["docker", "stats", "--no-stream", "--format", "table {{.Container}}\t{{.CPUPerc}}\t{{.MemUsage}}"],
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+                
+                if result.returncode == 0:
+                    diagnostico["recursos"] = {
+                        "stats_disponivel": True,
+                        "output": result.stdout
+                    }
+                else:
+                    diagnostico["recursos"] = {
+                        "stats_disponivel": False,
+                        "erro": result.stderr
+                    }
+                    
+            except Exception as e:
+                diagnostico["recursos"] = {
+                    "stats_disponivel": False,
+                    "erro": str(e)
+                }
+            
+        except Exception as e:
+            diagnostico["erro_geral"] = str(e)
+            diagnostico["problemas"].append(f"Erro durante diagnóstico: {str(e)}")
+        
+        return diagnostico 

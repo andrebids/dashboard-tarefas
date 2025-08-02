@@ -43,14 +43,20 @@ def main():
         
         # Configurar janela principal
         root.title("Dashboard de Tarefas - Python")
-        root.geometry("1200x800")
-        root.minsize(800, 600)
+        root.geometry("1400x900")
+        root.minsize(1000, 700)
         
         # Centralizar janela na tela
         root.update_idletasks()
-        x = (root.winfo_screenwidth() // 2) - (1200 // 2)
-        y = (root.winfo_screenheight() // 2) - (800 // 2)
-        root.geometry(f"1200x800+{x}+{y}")
+        x = (root.winfo_screenwidth() // 2) - (1400 // 2)
+        y = (root.winfo_screenheight() // 2) - (900 // 2)
+        root.geometry(f"1400x900+{x}+{y}")
+        
+        # Configurar ícone da janela (se disponível)
+        try:
+            root.iconbitmap("assets/icon.ico")
+        except:
+            pass  # Ignorar se não houver ícone
         
         # Criar dashboard
         dashboard = Dashboard(root, log_manager, settings)

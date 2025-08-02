@@ -13,6 +13,7 @@ from .componentes.tooltip import criar_tooltip
 from .abas.principal import AbaPrincipal
 from .abas.base_dados import AbaBaseDados
 from .abas.servidores import AbaServidores
+from .abas.build_planka import AbaBuildPlanka
 
 
 class Dashboard(ttk.Frame):
@@ -88,46 +89,52 @@ class Dashboard(ttk.Frame):
         main_frame.grid_rowconfigure(0, weight=1)
         main_frame.grid_columnconfigure(0, weight=1)
         
-        # Notebook (sistema de abas)
+        # Notebook (sistema de abas) - com tamanho mínimo
         self.notebook = ttk.Notebook(main_frame)
         self.notebook.grid(row=0, column=0, sticky="nsew", pady=(0, 5))
         self.notebook.grid_rowconfigure(0, weight=1)
         self.notebook.grid_columnconfigure(0, weight=1)
         
+        # Configurar tamanho mínimo para o notebook
+        self.notebook.configure(width=800, height=600)
+        
         # Barra de status
         self.status_bar = ttk.Frame(main_frame)
         self.status_bar.grid(row=1, column=0, sticky="ew", pady=(5, 0))
+        self.status_bar.grid_columnconfigure(0, weight=1)
+        self.status_bar.grid_columnconfigure(1, weight=1)
+        self.status_bar.grid_columnconfigure(2, weight=1)
+        self.status_bar.grid_columnconfigure(3, weight=1)
         
         # Status do sistema
         self.lbl_status = ttk.Label(self.status_bar, text="Sistema: Pronto")
-        self.lbl_status.pack(side=tk.LEFT)
+        self.lbl_status.grid(row=0, column=0, sticky="w", padx=(0, 10))
         
         # Status do Planka
         self.lbl_status_planka = ttk.Label(self.status_bar, text="Planka: Desconhecido")
-        self.lbl_status_planka.pack(side=tk.LEFT, padx=(20, 0))
+        self.lbl_status_planka.grid(row=0, column=1, sticky="w", padx=(0, 10))
         
         # Status de conexão
         self.lbl_status_conexao = ttk.Label(self.status_bar, text="Conexões: 0")
-        self.lbl_status_conexao.pack(side=tk.LEFT, padx=(20, 0))
+        self.lbl_status_conexao.grid(row=0, column=2, sticky="w", padx=(0, 10))
         
         # Status da base de dados
         self.lbl_status_db = ttk.Label(self.status_bar, text="Base de Dados: Desconhecido")
-        self.lbl_status_db.pack(side=tk.LEFT, padx=(20, 0))
-        
-
+        self.lbl_status_db.grid(row=0, column=3, sticky="w")
         
         # Frame para notificações
         self.frame_notificacoes = ttk.Frame(main_frame)
         self.frame_notificacoes.grid(row=2, column=0, sticky="ew", pady=(5, 0))
+        self.frame_notificacoes.grid_columnconfigure(0, weight=1)
         
         # Label para notificações
         self.lbl_notificacao = ttk.Label(self.frame_notificacoes, text="", foreground="blue")
-        self.lbl_notificacao.pack(side=tk.LEFT)
+        self.lbl_notificacao.grid(row=0, column=0, sticky="w")
         
         # Botão para fechar notificação
         self.btn_fechar_notif = ttk.Button(self.frame_notificacoes, text="✕", width=3, 
                                           command=self._fechar_notificacao)
-        self.btn_fechar_notif.pack(side=tk.RIGHT)
+        self.btn_fechar_notif.grid(row=0, column=1, sticky="e")
         
         # Inicialmente esconder notificações
         self.frame_notificacoes.grid_remove()
@@ -355,6 +362,10 @@ class Dashboard(ttk.Frame):
             self.abas["servidores"] = AbaServidores(self.notebook, self.log_manager, self.settings)
             self.notebook.add(self.abas["servidores"], text="🖥️ Servidores")
             
+            # Aba Build Planka
+            self.abas["build_planka"] = AbaBuildPlanka(self.notebook, self.log_manager, self.settings)
+            self.notebook.add(self.abas["build_planka"], text="🔨 Build Planka")
+            
             # Definir aba atual
             self.aba_atual = "principal"
             
@@ -371,7 +382,7 @@ class Dashboard(ttk.Frame):
             indice_ativo = self.notebook.index(self.notebook.select())
             
             # Mapear índice para nome da aba
-            nomes_abas = ["principal", "base_dados", "servidores"]
+            nomes_abas = ["principal", "base_dados", "servidores", "build_planka"]
             if 0 <= indice_ativo < len(nomes_abas):
                 self.aba_atual = nomes_abas[indice_ativo]
                 self.log_manager.log_sistema("INFO", f"Aba ativa: {self.aba_atual}")
