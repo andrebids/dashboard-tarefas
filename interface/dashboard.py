@@ -5,9 +5,12 @@ Interface principal do Dashboard de Tarefas.
 
 import tkinter as tk
 from tkinter import ttk, messagebox
-from typing import Optional
+from typing import Optional, Dict, Any
+import threading
+import time
 
 from .componentes.console import Console
+from .componentes.tooltip import criar_tooltip
 from .abas.principal import AbaPrincipal
 from .abas.base_dados import AbaBaseDados
 from .abas.servidores import AbaServidores
@@ -45,9 +48,31 @@ class Dashboard(ttk.Frame):
         # Console global
         self.console = None
         
+        # Sistema de comunicação entre abas
+        self.eventos = {}
+        self.callbacks = {}
+        
+        # Sistema de notificações
+        self.notificacoes = []
+        self.notificacao_atual = None
+        
+        # Status do sistema
+        self.status_sistema = {
+            "planka": "Desconhecido",
+            "base_dados": "Desconhecido", 
+            "conexoes": 0,
+            "logs": 0
+        }
+        
+        # Thread para atualizações automáticas
+        self.thread_atualizacao = None
+        self.executando = True
+        
         self._criar_interface()
         self._configurar_menu()
         self._inicializar_abas()
+        self._configurar_comunicacao()
+        self._iniciar_atualizacoes()
         
         # Registrar log de inicialização
         self.log_manager.log_sistema("SUCCESS", "Interface do dashboard inicializada")
@@ -103,8 +128,213 @@ class Dashboard(ttk.Frame):
         self.lbl_status_db = ttk.Label(self.status_bar, text="Base de Dados: Desconhecido")
         self.lbl_status_db.pack(side=tk.LEFT, padx=(20, 0))
         
+        # Status de logs
+        self.lbl_status_logs = ttk.Label(self.status_bar, text="Logs: 0")
+        self.lbl_status_logs.pack(side=tk.LEFT, padx=(20, 0))
+        
+        # Frame para notificações
+        self.frame_notificacoes = ttk.Frame(main_frame)
+        self.frame_notificacoes.grid(row=3, column=0, sticky="ew", pady=(5, 0))
+        
+        # Label para notificações
+        self.lbl_notificacao = ttk.Label(self.frame_notificacoes, text="", foreground="blue")
+        self.lbl_notificacao.pack(side=tk.LEFT)
+        
+        # Botão para fechar notificação
+        self.btn_fechar_notif = ttk.Button(self.frame_notificacoes, text="✕", width=3, 
+                                          command=self._fechar_notificacao)
+        self.btn_fechar_notif.pack(side=tk.RIGHT)
+        
+        # Inicialmente esconder notificações
+        self.frame_notificacoes.grid_remove()
+        
         # Configurar evento de mudança de aba
         self.notebook.bind("<<NotebookTabChanged>>", self._on_aba_mudou)
+        
+        # Adicionar tooltips
+        self._adicionar_tooltips()
+    
+    def _configurar_comunicacao(self):
+        """Configura o sistema de comunicação entre abas."""
+        try:
+            # Registrar eventos padrão
+            self.registrar_evento("planka_status_changed", self._on_planka_status_changed)
+            self.registrar_evento("base_dados_status_changed", self._on_base_dados_status_changed)
+            self.registrar_evento("servidores_status_changed", self._on_servidores_status_changed)
+            self.registrar_evento("logs_status_changed", self._on_logs_status_changed)
+            self.registrar_evento("notificacao", self._on_notificacao)
+            
+            self.log_manager.log_sistema("INFO", "Sistema de comunicação configurado")
+        except Exception as e:
+            self.log_manager.log_sistema("ERROR", f"Erro ao configurar comunicação: {e}")
+    
+    def _iniciar_atualizacoes(self):
+        """Inicia thread para atualizações automáticas."""
+        try:
+            self.thread_atualizacao = threading.Thread(target=self._loop_atualizacoes, daemon=True)
+            self.thread_atualizacao.start()
+            self.log_manager.log_sistema("INFO", "Thread de atualizações iniciada")
+        except Exception as e:
+            self.log_manager.log_sistema("ERROR", f"Erro ao iniciar atualizações: {e}")
+    
+    def _loop_atualizacoes(self):
+        """Loop principal para atualizações automáticas."""
+        while self.executando:
+            try:
+                # Atualizar status do sistema
+                self._atualizar_status_sistema()
+                
+                # Processar notificações pendentes
+                self._processar_notificacoes()
+                
+                # Aguardar 2 segundos
+                time.sleep(2)
+            except Exception as e:
+                self.log_manager.log_sistema("ERROR", f"Erro no loop de atualizações: {e}")
+                time.sleep(5)
+    
+    def registrar_evento(self, evento: str, callback):
+        """Registra um callback para um evento."""
+        if evento not in self.callbacks:
+            self.callbacks[evento] = []
+        self.callbacks[evento].append(callback)
+    
+    def disparar_evento(self, evento: str, dados: Any = None):
+        """Dispara um evento para todos os callbacks registrados."""
+        try:
+            if evento in self.callbacks:
+                for callback in self.callbacks[evento]:
+                    try:
+                        callback(dados)
+                    except Exception as e:
+                        self.log_manager.log_sistema("ERROR", f"Erro no callback do evento {evento}: {e}")
+        except Exception as e:
+            self.log_manager.log_sistema("ERROR", f"Erro ao disparar evento {evento}: {e}")
+    
+    def mostrar_notificacao(self, mensagem: str, tipo: str = "info", duracao: int = 5):
+        """Mostra uma notificação na interface."""
+        try:
+            notificacao = {
+                "mensagem": mensagem,
+                "tipo": tipo,
+                "duracao": duracao,
+                "timestamp": time.time()
+            }
+            self.notificacoes.append(notificacao)
+            
+            # Se não há notificação atual, mostrar imediatamente
+            if not self.notificacao_atual:
+                self._mostrar_proxima_notificacao()
+                
+        except Exception as e:
+            self.log_manager.log_sistema("ERROR", f"Erro ao criar notificação: {e}")
+    
+    def _processar_notificacoes(self):
+        """Processa notificações pendentes."""
+        try:
+            agora = time.time()
+            
+            # Remover notificações expiradas
+            self.notificacoes = [n for n in self.notificacoes 
+                               if agora - n["timestamp"] < n["duracao"]]
+            
+            # Se não há notificação atual e há pendentes, mostrar próxima
+            if not self.notificacao_atual and self.notificacoes:
+                self._mostrar_proxima_notificacao()
+                
+        except Exception as e:
+            self.log_manager.log_sistema("ERROR", f"Erro ao processar notificações: {e}")
+    
+    def _mostrar_proxima_notificacao(self):
+        """Mostra a próxima notificação na fila."""
+        try:
+            if not self.notificacoes:
+                return
+                
+            self.notificacao_atual = self.notificacoes.pop(0)
+            
+            # Configurar cor baseada no tipo
+            cores = {
+                "info": "blue",
+                "success": "green", 
+                "warning": "orange",
+                "error": "red"
+            }
+            cor = cores.get(self.notificacao_atual["tipo"], "blue")
+            
+            # Mostrar notificação
+            self.lbl_notificacao.config(text=self.notificacao_atual["mensagem"], foreground=cor)
+            self.frame_notificacoes.grid()
+            
+        except Exception as e:
+            self.log_manager.log_sistema("ERROR", f"Erro ao mostrar notificação: {e}")
+    
+    def _fechar_notificacao(self):
+        """Fecha a notificação atual."""
+        try:
+            self.notificacao_atual = None
+            self.frame_notificacoes.grid_remove()
+        except Exception as e:
+            self.log_manager.log_sistema("ERROR", f"Erro ao fechar notificação: {e}")
+    
+    def _atualizar_status_sistema(self):
+        """Atualiza o status do sistema na interface."""
+        try:
+            # Atualizar labels na thread principal
+            self.parent.after(0, self._atualizar_labels_status)
+        except Exception as e:
+            self.log_manager.log_sistema("ERROR", f"Erro ao atualizar status do sistema: {e}")
+    
+    def _atualizar_labels_status(self):
+        """Atualiza os labels de status na thread principal."""
+        try:
+            self.lbl_status_planka.config(text=f"Planka: {self.status_sistema['planka']}")
+            self.lbl_status_db.config(text=f"Base de Dados: {self.status_sistema['base_dados']}")
+            self.lbl_status_conexao.config(text=f"Conexões: {self.status_sistema['conexoes']}")
+            self.lbl_status_logs.config(text=f"Logs: {self.status_sistema['logs']}")
+        except Exception as e:
+            self.log_manager.log_sistema("ERROR", f"Erro ao atualizar labels de status: {e}")
+    
+    # Callbacks de eventos
+    def _on_planka_status_changed(self, status: str):
+        """Callback quando o status do Planka muda."""
+        self.status_sistema["planka"] = status
+    
+    def _on_base_dados_status_changed(self, status: str):
+        """Callback quando o status da base de dados muda."""
+        self.status_sistema["base_dados"] = status
+    
+    def _on_servidores_status_changed(self, num_conexoes: int):
+        """Callback quando o status dos servidores muda."""
+        self.status_sistema["conexoes"] = num_conexoes
+    
+    def _on_logs_status_changed(self, num_logs: int):
+        """Callback quando o status dos logs muda."""
+        self.status_sistema["logs"] = num_logs
+    
+    def _on_notificacao(self, dados: Dict[str, Any]):
+        """Callback para notificações."""
+        self.mostrar_notificacao(dados["mensagem"], dados.get("tipo", "info"), dados.get("duracao", 5))
+    
+    def _adicionar_tooltips(self):
+        """Adiciona tooltips aos elementos da interface."""
+        try:
+            # Tooltips para abas
+            criar_tooltip(self.notebook, "Navegue entre as diferentes seções do dashboard")
+            
+            # Tooltips para status
+            criar_tooltip(self.lbl_status, "Status geral do sistema")
+            criar_tooltip(self.lbl_status_planka, "Status atual do Planka")
+            criar_tooltip(self.lbl_status_conexao, "Número de conexões SSH ativas")
+            criar_tooltip(self.lbl_status_db, "Status da base de dados do Planka")
+            criar_tooltip(self.lbl_status_logs, "Número total de logs registrados")
+            
+            # Tooltip para notificação
+            criar_tooltip(self.btn_fechar_notif, "Fechar notificação atual")
+            
+            self.log_manager.log_sistema("INFO", "Tooltips adicionados à interface")
+        except Exception as e:
+            self.log_manager.log_sistema("ERROR", f"Erro ao adicionar tooltips: {e}")
     
     def _configurar_menu(self):
         """Configura o menu principal."""
@@ -292,6 +522,11 @@ class Dashboard(ttk.Frame):
     def salvar_configuracoes(self):
         """Salva as configurações do sistema."""
         try:
+            # Parar thread de atualizações
+            self.executando = False
+            if self.thread_atualizacao and self.thread_atualizacao.is_alive():
+                self.thread_atualizacao.join(timeout=2)
+            
             self.settings.salvar()
             self.log_manager.log_sistema("SUCCESS", "Configurações salvas")
         except Exception as e:
