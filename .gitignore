@@ -131,6 +131,23 @@ config/database_config.json
 config/database_key.key
 config/credentials.json
 config/passwords.json
+config/secrets.json
+config/*.key
+config/*.pem
+config/*.ppk
+
+# Arquivos de teste com credenciais
+test_*.py
+*_test.py
+test_admin.py
+
+# Configuração SSH (SENSÍVEL - NÃO COMMITAR)
+config/ssh_credentials.json
+config/ssh_key.key
+config/ssh-keys/
+*.pem
+*.ppk
+*.key
 
 # Backups
 backups/

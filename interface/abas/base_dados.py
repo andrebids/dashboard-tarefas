@@ -8,6 +8,7 @@ from tkinter import ttk, messagebox, filedialog
 import threading
 from pathlib import Path
 import sys
+import os
 
 # Importar o PlankaDatabaseManager
 sys.path.append(str(Path(__file__).parent.parent.parent))
@@ -37,10 +38,7 @@ class AbaBaseDados(ttk.Frame):
         
         # Inicializar PlankaDatabaseManager
         try:
-            config_dir = Path(settings.obter("config", "diretorio"))
-            if not config_dir:
-                # Fallback para diretório padrão
-                config_dir = Path(__file__).parent.parent.parent / "config"
+            config_dir = settings.obter_diretorio_config()
         except:
             # Fallback para diretório padrão
             config_dir = Path(__file__).parent.parent.parent / "config"
@@ -120,11 +118,6 @@ class AbaBaseDados(ttk.Frame):
                                           command=self._inicializar_base_dados)
         self.btn_inicializar.pack(side=tk.LEFT, padx=(0, 10))
         
-        # Botão Criar Usuário Admin
-        self.btn_admin = ttk.Button(linha1, text="👤 Criar Admin", 
-                                    command=self._criar_usuario_admin)
-        self.btn_admin.pack(side=tk.LEFT, padx=(0, 10))
-        
         # Botão Editor
         self.btn_editor = ttk.Button(linha1, text="✏️ Abrir Editor", 
                                      command=self._abrir_editor)
@@ -153,6 +146,19 @@ class AbaBaseDados(ttk.Frame):
         self.btn_substituir = ttk.Button(linha2, text="🔄 Substituir Base", 
                                          command=self._substituir_base)
         self.btn_substituir.pack(side=tk.LEFT, padx=(0, 10))
+        
+        # Frame de progresso (inicialmente oculto)
+        self.progress_frame = ttk.Frame(main_frame)
+        self.progress_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        self.lbl_progress = ttk.Label(self.progress_frame, text="", font=("Arial", 10))
+        self.lbl_progress.pack(anchor="w")
+        
+        self.progress_bar = ttk.Progressbar(self.progress_frame, mode='indeterminate')
+        self.progress_bar.pack(fill=tk.X, pady=(5, 0))
+        
+        # Ocultar progresso inicialmente
+        self.progress_frame.pack_forget()
         
         # Frame de backups
         backups_frame = ttk.LabelFrame(main_frame, text="Backups Disponíveis", padding=10)
@@ -189,6 +195,9 @@ class AbaBaseDados(ttk.Frame):
         
         # Configurar estado inicial dos botões
         self._atualizar_estado_botoes()
+        
+        # Adicionar tooltips aos botões
+        self._adicionar_tooltips()
     
     def _verificar_status_inicial(self):
         """Verifica o status inicial da base de dados."""
@@ -247,10 +256,6 @@ class AbaBaseDados(ttk.Frame):
             self.btn_backup.config(state="normal" if base_existe else "disabled")
             self.btn_editor.config(state="normal" if base_existe else "disabled")
             
-            # Botões que precisam de tabelas existentes
-            tabelas_existem = conectividade["tables_exist"]
-            self.btn_admin.config(state="normal" if tabelas_existem else "disabled")
-            
         except Exception as e:
             self.log_manager.log_sistema("ERROR", f"Erro ao atualizar estado dos botões: {e}")
     
@@ -267,9 +272,12 @@ class AbaBaseDados(ttk.Frame):
     def _executar_criar_base_dados(self):
         """Executa a criação da base de dados em thread separada."""
         try:
+            self._mostrar_progresso("Criando base de dados...")
             self.log_manager.log_sistema("INFO", "Criando base de dados...")
             
             sucesso, mensagem = self.db_manager.criar_base_dados()
+            
+            self._ocultar_progresso()
             
             if sucesso:
                 self.log_manager.log_sistema("SUCCESS", mensagem)
@@ -280,6 +288,7 @@ class AbaBaseDados(ttk.Frame):
                 messagebox.showerror("Erro", mensagem)
                 
         except Exception as e:
+            self._ocultar_progresso()
             self.log_manager.log_sistema("ERROR", f"Erro inesperado: {e}")
             messagebox.showerror("Erro", f"Erro inesperado: {e}")
     
@@ -296,9 +305,12 @@ class AbaBaseDados(ttk.Frame):
     def _executar_inicializar_base_dados(self):
         """Executa a inicialização da base de dados em thread separada."""
         try:
+            self._mostrar_progresso("Inicializando base de dados...")
             self.log_manager.log_sistema("INFO", "Inicializando base de dados...")
             
             sucesso, mensagem = self.db_manager.inicializar_base_dados()
+            
+            self._ocultar_progresso()
             
             if sucesso:
                 self.log_manager.log_sistema("SUCCESS", mensagem)
@@ -309,81 +321,13 @@ class AbaBaseDados(ttk.Frame):
                 messagebox.showerror("Erro", mensagem)
                 
         except Exception as e:
+            self._ocultar_progresso()
             self.log_manager.log_sistema("ERROR", f"Erro inesperado: {e}")
             messagebox.showerror("Erro", f"Erro inesperado: {e}")
     
-    def _criar_usuario_admin(self):
-        """Cria um usuário administrador."""
-        # Diálogo para obter dados do usuário
-        dialog = tk.Toplevel(self)
-        dialog.title("Criar Usuário Administrador")
-        dialog.geometry("400x200")
-        dialog.transient(self)
-        dialog.grab_set()
-        
-        # Centralizar diálogo
-        dialog.geometry("+%d+%d" % (self.winfo_rootx() + 50, self.winfo_rooty() + 50))
-        
-        # Frame principal
-        frame = ttk.Frame(dialog, padding=20)
-        frame.pack(fill=tk.BOTH, expand=True)
-        
-        # Campos
-        ttk.Label(frame, text="Email:").grid(row=0, column=0, sticky="w", pady=5)
-        email_var = tk.StringVar()
-        email_entry = ttk.Entry(frame, textvariable=email_var, width=30)
-        email_entry.grid(row=0, column=1, sticky="ew", padx=(10, 0), pady=5)
-        
-        ttk.Label(frame, text="Senha:").grid(row=1, column=0, sticky="w", pady=5)
-        password_var = tk.StringVar()
-        password_entry = ttk.Entry(frame, textvariable=password_var, show="*", width=30)
-        password_entry.grid(row=1, column=1, sticky="ew", padx=(10, 0), pady=5)
-        
-        # Botões
-        botoes_frame = ttk.Frame(frame)
-        botoes_frame.grid(row=2, column=0, columnspan=2, pady=20)
-        
-        def criar():
-            email = email_var.get().strip()
-            password = password_var.get().strip()
-            
-            if not email or not password:
-                messagebox.showerror("Erro", "Preencha todos os campos")
-                return
-            
-            dialog.destroy()
-            
-            # Executar criação em thread
-            def executar_criacao():
-                try:
-                    self.log_manager.log_sistema("INFO", f"Criando usuário admin: {email}")
-                    
-                    sucesso, mensagem = self.db_manager.criar_usuario_admin(email, password)
-                    
-                    if sucesso:
-                        self.log_manager.log_sistema("SUCCESS", mensagem)
-                        messagebox.showinfo("Sucesso", mensagem)
-                        self._verificar_status_inicial()
-                    else:
-                        self.log_manager.log_sistema("ERROR", mensagem)
-                        messagebox.showerror("Erro", mensagem)
-                        
-                except Exception as e:
-                    self.log_manager.log_sistema("ERROR", f"Erro inesperado: {e}")
-                    messagebox.showerror("Erro", f"Erro inesperado: {e}")
-            
-            thread = threading.Thread(target=executar_criacao)
-            thread.daemon = True
-            thread.start()
-        
-        ttk.Button(botoes_frame, text="Criar", command=criar).pack(side=tk.LEFT, padx=(0, 10))
-        ttk.Button(botoes_frame, text="Cancelar", command=dialog.destroy).pack(side=tk.LEFT)
-        
-        # Configurar grid
-        frame.columnconfigure(1, weight=1)
-        
-        # Focar no primeiro campo
-        email_entry.focus()
+
+    
+
     
     def _abrir_editor(self):
         """Abre o editor de base de dados."""
@@ -422,9 +366,12 @@ class AbaBaseDados(ttk.Frame):
     def _executar_fazer_backup(self):
         """Executa o backup em thread separada."""
         try:
+            self._mostrar_progresso("Fazendo backup da base de dados...")
             self.log_manager.log_sistema("INFO", "Fazendo backup da base de dados...")
             
             sucesso, mensagem = self.db_manager.backup_completo()
+            
+            self._ocultar_progresso()
             
             if sucesso:
                 self.log_manager.log_sistema("SUCCESS", mensagem)
@@ -435,6 +382,7 @@ class AbaBaseDados(ttk.Frame):
                 messagebox.showerror("Erro", mensagem)
                 
         except Exception as e:
+            self._ocultar_progresso()
             self.log_manager.log_sistema("ERROR", f"Erro inesperado: {e}")
             messagebox.showerror("Erro", f"Erro inesperado: {e}")
     
@@ -451,6 +399,10 @@ class AbaBaseDados(ttk.Frame):
             )
             
             if arquivo:
+                # Validar arquivo antes do upload
+                if not self._validar_arquivo_upload(arquivo):
+                    return
+                
                 self.log_manager.log_sistema("INFO", f"Fazendo upload: {arquivo}")
                 
                 sucesso, mensagem = self.db_manager.upload_backup(arquivo)
@@ -466,6 +418,43 @@ class AbaBaseDados(ttk.Frame):
         except Exception as e:
             self.log_manager.log_sistema("ERROR", f"Erro ao fazer upload: {e}")
             messagebox.showerror("Erro", f"Erro ao fazer upload: {e}")
+    
+    def _validar_arquivo_upload(self, arquivo: str) -> bool:
+        """Valida um arquivo de upload."""
+        try:
+            # Verificar se o arquivo existe
+            if not os.path.exists(arquivo):
+                messagebox.showerror("Erro", "Arquivo não encontrado")
+                return False
+            
+            # Verificar tamanho do arquivo (máximo 100MB)
+            tamanho = os.path.getsize(arquivo)
+            tamanho_mb = tamanho / (1024 * 1024)
+            
+            if tamanho_mb > 100:
+                resposta = messagebox.askyesno("Arquivo Grande", 
+                                             f"O arquivo tem {tamanho_mb:.1f}MB. "
+                                             "Arquivos grandes podem demorar muito. "
+                                             "Deseja continuar?")
+                if not resposta:
+                    return False
+            
+            # Verificar extensão
+            extensao = os.path.splitext(arquivo)[1].lower()
+            extensoes_validas = ['.sql', '.zip', '.gz', '.tar']
+            
+            if extensao not in extensoes_validas:
+                resposta = messagebox.askyesno("Extensão Desconhecida", 
+                                             f"O arquivo tem extensão '{extensao}' que não é comum. "
+                                             "Deseja continuar mesmo assim?")
+                if not resposta:
+                    return False
+            
+            return True
+            
+        except Exception as e:
+            messagebox.showerror("Erro", f"Erro ao validar arquivo: {e}")
+            return False
     
     def _restaurar_backup(self):
         """Restaura um backup."""
@@ -497,9 +486,12 @@ class AbaBaseDados(ttk.Frame):
     def _executar_restaurar_backup(self, nome_backup):
         """Executa a restauração em thread separada."""
         try:
+            self._mostrar_progresso(f"Restaurando backup: {nome_backup}")
             self.log_manager.log_sistema("INFO", f"Restaurando backup: {nome_backup}")
             
             sucesso, mensagem = self.db_manager.restaurar_backup(nome_backup)
+            
+            self._ocultar_progresso()
             
             if sucesso:
                 self.log_manager.log_sistema("SUCCESS", mensagem)
@@ -510,6 +502,7 @@ class AbaBaseDados(ttk.Frame):
                 messagebox.showerror("Erro", mensagem)
                 
         except Exception as e:
+            self._ocultar_progresso()
             self.log_manager.log_sistema("ERROR", f"Erro inesperado: {e}")
             messagebox.showerror("Erro", f"Erro inesperado: {e}")
     
@@ -547,9 +540,12 @@ class AbaBaseDados(ttk.Frame):
     def _executar_substituir_base(self, nome_backup):
         """Executa a substituição em thread separada."""
         try:
+            self._mostrar_progresso(f"Substituindo base por: {nome_backup}")
             self.log_manager.log_sistema("INFO", f"Substituindo base por: {nome_backup}")
             
             sucesso, mensagem = self.db_manager.substituir_base(nome_backup)
+            
+            self._ocultar_progresso()
             
             if sucesso:
                 self.log_manager.log_sistema("SUCCESS", mensagem)
@@ -560,6 +556,7 @@ class AbaBaseDados(ttk.Frame):
                 messagebox.showerror("Erro", mensagem)
                 
         except Exception as e:
+            self._ocultar_progresso()
             self.log_manager.log_sistema("ERROR", f"Erro inesperado: {e}")
             messagebox.showerror("Erro", f"Erro inesperado: {e}")
     
@@ -635,6 +632,70 @@ class AbaBaseDados(ttk.Frame):
                 
         except Exception as e:
             messagebox.showerror("Erro", f"Erro ao comprimir backup: {e}")
+    
+    def _adicionar_tooltips(self):
+        """Adiciona tooltips aos botões da interface."""
+        try:
+            # Tooltips para botões de ação
+            self._criar_tooltip(self.btn_criar, 
+                               "Cria uma nova base de dados PostgreSQL para o Planka")
+            
+            self._criar_tooltip(self.btn_inicializar, 
+                               "Executa as migrações e seeders para inicializar a base de dados")
+            
+            self._criar_tooltip(self.btn_editor, 
+                               "Abre o pgAdmin (navegador) ou DBeaver (aplicação) para editar a base")
+            
+            self._criar_tooltip(self.btn_backup, 
+                               "Faz um backup completo da base de dados atual")
+            
+            self._criar_tooltip(self.btn_upload, 
+                               "Faz upload de um arquivo de backup (.sql ou .zip)")
+            
+            self._criar_tooltip(self.btn_restaurar, 
+                               "Restaura um backup selecionado (modo seguro)")
+            
+            self._criar_tooltip(self.btn_substituir, 
+                               "Substitui completamente a base atual por um backup")
+            
+        except Exception as e:
+            self.log_manager.log_sistema("WARNING", f"Erro ao criar tooltips: {e}")
+    
+    def _criar_tooltip(self, widget, texto):
+        """Cria um tooltip simples para um widget."""
+        def mostrar_tooltip(event):
+            tooltip = tk.Toplevel()
+            tooltip.wm_overrideredirect(True)
+            tooltip.wm_geometry(f"+{event.x_root+10}+{event.y_root+10}")
+            
+            label = tk.Label(tooltip, text=texto, 
+                           justify=tk.LEFT,
+                           background="#ffffe0", 
+                           relief=tk.SOLID, 
+                           borderwidth=1,
+                           font=("Arial", "8", "normal"))
+            label.pack()
+            
+            def esconder_tooltip(event):
+                tooltip.destroy()
+            
+            widget.tooltip = tooltip
+            widget.bind('<Leave>', esconder_tooltip)
+        
+        widget.bind('<Enter>', mostrar_tooltip)
+    
+    def _mostrar_progresso(self, mensagem: str):
+        """Mostra a barra de progresso com mensagem."""
+        self.lbl_progress.config(text=mensagem)
+        self.progress_frame.pack(fill=tk.X, pady=(0, 10))
+        self.progress_bar.start()
+        self.update()
+    
+    def _ocultar_progresso(self):
+        """Oculta a barra de progresso."""
+        self.progress_bar.stop()
+        self.progress_frame.pack_forget()
+        self.update()
     
     def atualizar(self):
         """Atualiza a aba base de dados."""

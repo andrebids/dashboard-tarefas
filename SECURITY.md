@@ -1,176 +1,123 @@
-# 🔐 GUIA DE SEGURANÇA - CONFIGURAÇÃO DE CREDENCIAIS
+# 🔒 Segurança - Dashboard de Tarefas
 
-## ⚠️ **IMPORTANTE: CREDENCIAIS REMOVIDAS DO CÓDIGO**
+## ⚠️ Informações Sensíveis
 
-As credenciais da base de dados foram **removidas do código** por questões de segurança. Agora é necessário configurá-las de forma segura.
+Este projeto contém informações sensíveis que **NUNCA** devem ser enviadas em commits.
 
-## 🚨 **PROBLEMA RESOLVIDO**
+### Arquivos Sensíveis (NÃO COMMITAR)
 
-**Antes (INSECURO):**
-```python
-# ❌ CREDENCIAIS HARDCODED NO CÓDIGO
-self.db_host = "localhost"
-self.db_port = 5432
-self.db_name = "planka"
-self.db_user = "postgres"
-self.db_password = "planka"  # ❌ SENHA EXPOSTA
-```
+- `config/database_config.json` - Configuração da base de dados com senhas
+- `config/database_key.key` - Chave de encriptação
+- `config/credentials.json` - Credenciais gerais
+- `config/passwords.json` - Senhas
+- `config/secrets.json` - Segredos
+- `*.key`, `*.pem`, `*.ppk` - Chaves SSH/SSL
+- `test_*.py` - Arquivos de teste com credenciais hardcoded
 
-**Agora (SEGURO):**
-```python
-# ✅ CONFIGURAÇÃO SEGURA
-from config.database_config import DatabaseConfig
-self.db_config = DatabaseConfig(config_dir)
-config = self.db_config.get_database_config()  # ✅ SENHA SEGURA
-```
+### Arquivos Seguros (PODE COMMITAR)
 
-## 🔧 **COMO CONFIGURAR AS CREDENCIAIS**
+- `config/database_config.example.json` - Exemplo de configuração
+- `config/settings.json` - Configurações gerais (sem senhas)
+- `config/settings.py` - Código de configuração
 
-### **Opção 1: Script Automático (RECOMENDADO)**
+## 🛡️ Boas Práticas
 
-Execute o script de configuração:
+### 1. Configuração da Base de Dados
 
 ```bash
-python configurar_credenciais.py
+# Copiar o arquivo de exemplo
+cp config/database_config.example.json config/database_config.json
+
+# Editar com suas credenciais reais
+# NUNCA commitar este arquivo
 ```
 
-O script irá:
-1. ✅ Verificar a configuração atual
-2. ✅ Guiar você através do processo de configuração
-3. ✅ Configurar as credenciais de forma segura
+### 2. Variáveis de Ambiente
 
-### **Opção 2: Configuração Manual**
+Use variáveis de ambiente para credenciais:
 
-#### **2.1 Variáveis de Ambiente (MAIS SEGURO)**
-
-**Windows (PowerShell):**
-```powershell
-$env:PLANKA_DB_PASSWORD = "sua_senha_aqui"
-```
-
-**Windows (CMD):**
-```cmd
-set PLANKA_DB_PASSWORD=sua_senha_aqui
-```
-
-**Linux/Mac:**
 ```bash
-export PLANKA_DB_PASSWORD='sua_senha_aqui'
+export PLANKA_DB_PASSWORD="sua_senha_aqui"
+export PLANKA_SECRET_KEY="sua_chave_secreta"
 ```
 
-#### **2.2 Arquivo de Configuração Criptografado**
+### 3. Arquivos de Teste
 
-O sistema também suporta salvar a senha em um arquivo criptografado:
-
-1. Execute: `python configurar_credenciais.py`
-2. Escolha a opção 2 (Arquivo de configuração)
-3. Digite a senha quando solicitado
-4. A senha será criptografada e salva automaticamente
-
-## 📁 **ARQUIVOS DE CONFIGURAÇÃO**
-
-### **Arquivos Criados Automaticamente:**
-- `config/database_config.json` - Configuração da base de dados
-- `config/database_key.key` - Chave de criptografia (NÃO COMMITAR)
-
-### **Arquivos Protegidos (.gitignore):**
-```
-# Configuração da base de dados (SENSÍVEL - NÃO COMMITAR)
-config/database_config.json
-config/database_key.key
-config/credentials.json
-config/passwords.json
-```
-
-## 🔒 **NÍVEIS DE SEGURANÇA**
-
-### **Nível 1: Variáveis de Ambiente (MAIS SEGURO)**
-- ✅ Senha nunca salva em arquivo
-- ✅ Senha não aparece em logs
-- ✅ Senha não é commitada no Git
-- ⚠️ Precisa definir a variável toda vez
-
-### **Nível 2: Arquivo Criptografado (SEGURO)**
-- ✅ Senha criptografada com Fernet (AES-256)
-- ✅ Chave de criptografia separada
-- ✅ Arquivos protegidos no .gitignore
-- ⚠️ Arquivo existe no sistema
-
-## 🛠️ **CONFIGURAÇÃO PADRÃO**
-
-A configuração padrão é:
-- **Host**: localhost
-- **Porta**: 5432
-- **Base de Dados**: planka
-- **Usuário**: postgres
-- **Senha**: (deve ser configurada)
-
-## 🔍 **VERIFICAR CONFIGURAÇÃO**
-
-Para verificar se a configuração está correta:
+Nunca inclua credenciais reais em arquivos de teste:
 
 ```python
-from config.database_config import DatabaseConfig
-from pathlib import Path
+# ❌ ERRADO
+password = "admin123"
 
-config_dir = Path("config")
-db_config = DatabaseConfig(config_dir)
-config_info = db_config.get_config_info()
-
-print(f"Configuração válida: {config_info['valid']}")
-print(f"Senha configurada: {config_info['password_set']}")
+# ✅ CORRETO
+password = os.getenv("TEST_PASSWORD", "test_password")
 ```
 
-## 🚀 **PRÓXIMOS PASSOS**
+## 🔍 Verificação de Segurança
 
-1. **Execute o script de configuração:**
+Antes de fazer commit, verifique:
+
+1. **Arquivos sensíveis não estão no staging:**
    ```bash
-   python configurar_credenciais.py
+   git status
    ```
 
-2. **Configure a senha** seguindo as instruções
-
-3. **Execute o dashboard:**
+2. **Nenhuma senha hardcoded:**
    ```bash
-   python main.py
+   grep -r "password\|senha\|admin123" . --exclude-dir=.git
    ```
 
-4. **Acesse a aba "Base de Dados"** para gerenciar a base
+3. **Arquivos de configuração estão no .gitignore:**
+   ```bash
+   git check-ignore config/database_config.json
+   ```
 
-## ⚡ **SOLUÇÃO RÁPIDA**
+## 🚨 Em Caso de Exposição
 
-Se precisar configurar rapidamente:
+Se credenciais foram expostas:
 
-```bash
-# 1. Configurar variável de ambiente
-$env:PLANKA_DB_PASSWORD = "planka"
+1. **Imediatamente:**
+   - Alterar todas as senhas expostas
+   - Revogar tokens/chaves
+   - Notificar administradores
 
-# 2. Executar dashboard
-python main.py
-```
+2. **Limpar histórico:**
+   ```bash
+   git filter-branch --force --index-filter \
+   'git rm --cached --ignore-unmatch config/database_config.json' \
+   --prune-empty --tag-name-filter cat -- --all
+   ```
 
-## 🔧 **TROUBLESHOOTING**
+3. **Forçar push:**
+   ```bash
+   git push origin --force --all
+   ```
 
-### **Erro: "Configuração da base de dados inválida"**
-- Execute: `python configurar_credenciais.py`
-- Configure a senha seguindo as instruções
+## 📋 Checklist de Segurança
 
-### **Erro: "Senha não configurada"**
-- Defina a variável de ambiente: `$env:PLANKA_DB_PASSWORD = "sua_senha"`
-- Ou execute o script de configuração
+- [ ] Nenhum arquivo com credenciais no staging
+- [ ] Variáveis de ambiente configuradas
+- [ ] Arquivos de exemplo criados
+- [ ] .gitignore atualizado
+- [ ] Testes não contêm credenciais reais
+- [ ] Documentação de segurança atualizada
 
-### **Erro: "Arquivo de configuração não encontrado"**
-- Execute: `python configurar_credenciais.py`
-- O script criará os arquivos necessários
+## 🔐 Configuração Segura
 
-## 📞 **SUPORTE**
+### Para Desenvolvedores
 
-Se tiver problemas:
-1. Execute: `python configurar_credenciais.py`
-2. Siga as instruções na tela
-3. Verifique se a variável de ambiente está definida
-4. Consulte este guia de segurança
+1. Clone o repositório
+2. Copie `config/database_config.example.json` para `config/database_config.json`
+3. Configure suas credenciais locais
+4. NUNCA commite o arquivo com credenciais reais
+
+### Para Produção
+
+1. Use variáveis de ambiente
+2. Configure chaves de encriptação
+3. Use secrets management
+4. Implemente rotação de credenciais
 
 ---
 
-**✅ SEGURANÇA GARANTIDA: As credenciais não estão mais no código!** 
+**Lembre-se: Segurança é responsabilidade de todos!** 🔒 

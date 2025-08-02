@@ -25,7 +25,7 @@ def main():
         
         # Definir diretório de configuração (com fallback)
         try:
-            config_dir = Path(settings.obter("config", "diretorio"))
+            config_dir = settings.obter_diretorio_config()
         except:
             # Fallback para diretório padrão
             config_dir = Path(__file__).parent / "config"

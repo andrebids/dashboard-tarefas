@@ -42,6 +42,9 @@ class Settings:
                 "backup_automatico": True,
                 "backup_intervalo_horas": 24
             },
+            "config": {
+                "diretorio": str(self.base_dir / "config")
+            },
             "logs": {
                 "nivel": "INFO",
                 "max_arquivos": 10,
@@ -156,6 +159,10 @@ class Settings:
         """Obtém o diretório de logs por tipo."""
         return Path(self.obter("logs", f"diretorio_{tipo}"))
     
+    def obter_diretorio_config(self):
+        """Obtém o diretório de configuração."""
+        return Path(self.obter("config", "diretorio"))
+    
     def criar_diretorios_necessarios(self):
         """Cria todos os diretórios necessários para o funcionamento."""
         diretorios = [
@@ -163,6 +170,7 @@ class Settings:
             self.obter_diretorio_logs("sistema"),
             self.obter_diretorio_logs("tarefas"),
             self.obter_diretorio_logs("servidores"),
+            self.obter_diretorio_config(),
             self.config_file.parent
         ]
         

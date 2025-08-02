@@ -197,7 +197,6 @@ dashboard-tarefas-python/
 - [ ] **Implementar criar_base_dados()** - criar nova base de dados PostgreSQL
 - [ ] **Implementar inicializar_base_dados()** - executar migrações e seeders
 - [ ] **Implementar verificar_estrutura()** - validar se todas as tabelas existem
-- [ ] **Implementar criar_usuario_admin()** - criar usuário administrador padrão
 - [ ] **Implementar configurar_permissoes()** - configurar permissões de acesso
 
 #### **Tarefa 2.5.3: Editor de Base de Dados**

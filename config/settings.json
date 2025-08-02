@@ -16,6 +16,9 @@
         "backup_automatico": true,
         "backup_intervalo_horas": 24
     },
+    "config": {
+        "diretorio": "C:\\Users\\Andre\\Desktop\\DEV\\dashboard-tarefas\\config"
+    },
     "logs": {
         "nivel": "INFO",
         "max_arquivos": 10,

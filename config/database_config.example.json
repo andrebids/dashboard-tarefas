@@ -1,0 +1,9 @@
+{
+  "host": "localhost",
+  "port": 5432,
+  "database": "planka",
+  "user": "postgres",
+  "password": "SUA_SENHA_AQUI",
+  "use_environment": false,
+  "encrypted": true
+} 

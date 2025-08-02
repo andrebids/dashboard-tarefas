@@ -35,7 +35,7 @@ def main():
         settings = Settings()
         
         # Inicializar sistema de logs
-        log_manager = LogManager()
+        log_manager = LogManager(settings)
         log_manager.registrar_log("INFO", "Iniciando Dashboard de Tarefas Python")
         
         # Criar janela principal

@@ -10,6 +10,7 @@ import time
 import psycopg2
 import zipfile
 import shutil
+import tempfile
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime
@@ -39,10 +40,7 @@ class PlankaDatabaseManager:
         
         # Configuração segura da base de dados
         try:
-            config_dir = Path(settings.obter("config", "diretorio"))
-            if not config_dir:
-                # Fallback para diretório padrão
-                config_dir = Path(__file__).parent.parent / "config"
+            config_dir = settings.obter_diretorio_config()
         except:
             # Fallback para diretório padrão
             config_dir = Path(__file__).parent.parent / "config"
@@ -286,44 +284,7 @@ class PlankaDatabaseManager:
         except Exception as e:
             return False, f"Erro ao inicializar base de dados: {str(e)}"
     
-    def criar_usuario_admin(self, email: str, password: str) -> Tuple[bool, str]:
-        """
-        Cria um usuário administrador na base de dados.
-        
-        Args:
-            email: Email do administrador
-            password: Senha do administrador
-            
-        Returns:
-            (sucesso, mensagem)
-        """
-        try:
-            # Verificar se a base existe e tem tabelas
-            status = self.verificar_conectividade()
-            if not status["tables_exist"]:
-                return False, "Base de dados não está inicializada"
-            
-            # Executar comando para criar usuário admin
-            result = subprocess.run(
-                ["docker-compose", "exec", "-T", "planka", "npm", "run", "db:seed:admin"],
-                cwd=self.planka_dir,
-                capture_output=True,
-                text=True,
-                timeout=60,
-                env={
-                    **os.environ,
-                    "ADMIN_EMAIL": email,
-                    "ADMIN_PASSWORD": password
-                }
-            )
-            
-            if result.returncode == 0:
-                return True, "Usuário administrador criado com sucesso"
-            else:
-                return False, f"Erro ao criar usuário: {result.stderr}"
-                
-        except Exception as e:
-            return False, f"Erro ao criar usuário administrador: {str(e)}"
+
     
     def backup_completo(self, nome_backup: str = None) -> Tuple[bool, str]:
         """
@@ -694,4 +655,6 @@ class PlankaDatabaseManager:
         """
         Configura as credenciais da base de dados de forma segura.
         """
-        self.db_config.setup_environment_variable() 
+        self.db_config.setup_environment_variable()
+    
+ 
