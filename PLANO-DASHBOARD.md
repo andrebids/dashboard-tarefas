@@ -595,7 +595,7 @@ if %errorlevel% equ 0 (
 ---
 
 **Status do Plano**: ✅ Completo e Organizado
-**Próximo Passo**: Iniciar Fase 2.5 - Gestão da Base de Dados do Planka
+**Próximo Passo**: Iniciar Fase 5 - Sistema de Logs Avançado
 **Tecnologia**: Python + Tkinter
 **Duração Total**: 4 semanas
 **Responsável**: Equipe de Desenvolvimento
