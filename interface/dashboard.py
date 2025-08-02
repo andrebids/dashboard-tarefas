@@ -9,12 +9,10 @@ from typing import Optional, Dict, Any
 import threading
 import time
 
-from .componentes.console import Console
 from .componentes.tooltip import criar_tooltip
 from .abas.principal import AbaPrincipal
 from .abas.base_dados import AbaBaseDados
 from .abas.servidores import AbaServidores
-from .abas.logs import AbaLogs
 
 
 class Dashboard(ttk.Frame):
@@ -45,9 +43,6 @@ class Dashboard(ttk.Frame):
         self.abas = {}
         self.aba_atual = None
         
-        # Console global
-        self.console = None
-        
         # Sistema de comunicação entre abas
         self.eventos = {}
         self.callbacks = {}
@@ -60,8 +55,7 @@ class Dashboard(ttk.Frame):
         self.status_sistema = {
             "planka": "Desconhecido",
             "base_dados": "Desconhecido", 
-            "conexoes": 0,
-            "logs": 0
+            "conexoes": 0
         }
         
         # Thread para atualizações automáticas
@@ -100,17 +94,9 @@ class Dashboard(ttk.Frame):
         self.notebook.grid_rowconfigure(0, weight=1)
         self.notebook.grid_columnconfigure(0, weight=1)
         
-        # Console global (fixa na parte inferior)
-        self.console = Console(main_frame)
-        self.console.grid(row=1, column=0, sticky="ew", pady=(5, 0))
-        
-        # Configurar callbacks da console
-        self.console.definir_callback_limpar(self._limpar_console)
-        self.console.definir_callback_exportar(self._exportar_logs)
-        
         # Barra de status
         self.status_bar = ttk.Frame(main_frame)
-        self.status_bar.grid(row=2, column=0, sticky="ew", pady=(5, 0))
+        self.status_bar.grid(row=1, column=0, sticky="ew", pady=(5, 0))
         
         # Status do sistema
         self.lbl_status = ttk.Label(self.status_bar, text="Sistema: Pronto")
@@ -128,13 +114,11 @@ class Dashboard(ttk.Frame):
         self.lbl_status_db = ttk.Label(self.status_bar, text="Base de Dados: Desconhecido")
         self.lbl_status_db.pack(side=tk.LEFT, padx=(20, 0))
         
-        # Status de logs
-        self.lbl_status_logs = ttk.Label(self.status_bar, text="Logs: 0")
-        self.lbl_status_logs.pack(side=tk.LEFT, padx=(20, 0))
+
         
         # Frame para notificações
         self.frame_notificacoes = ttk.Frame(main_frame)
-        self.frame_notificacoes.grid(row=3, column=0, sticky="ew", pady=(5, 0))
+        self.frame_notificacoes.grid(row=2, column=0, sticky="ew", pady=(5, 0))
         
         # Label para notificações
         self.lbl_notificacao = ttk.Label(self.frame_notificacoes, text="", foreground="blue")
@@ -161,7 +145,6 @@ class Dashboard(ttk.Frame):
             self.registrar_evento("planka_status_changed", self._on_planka_status_changed)
             self.registrar_evento("base_dados_status_changed", self._on_base_dados_status_changed)
             self.registrar_evento("servidores_status_changed", self._on_servidores_status_changed)
-            self.registrar_evento("logs_status_changed", self._on_logs_status_changed)
             self.registrar_evento("notificacao", self._on_notificacao)
             
             self.log_manager.log_sistema("INFO", "Sistema de comunicação configurado")
@@ -291,7 +274,6 @@ class Dashboard(ttk.Frame):
             self.lbl_status_planka.config(text=f"Planka: {self.status_sistema['planka']}")
             self.lbl_status_db.config(text=f"Base de Dados: {self.status_sistema['base_dados']}")
             self.lbl_status_conexao.config(text=f"Conexões: {self.status_sistema['conexoes']}")
-            self.lbl_status_logs.config(text=f"Logs: {self.status_sistema['logs']}")
         except Exception as e:
             self.log_manager.log_sistema("ERROR", f"Erro ao atualizar labels de status: {e}")
     
@@ -308,9 +290,7 @@ class Dashboard(ttk.Frame):
         """Callback quando o status dos servidores muda."""
         self.status_sistema["conexoes"] = num_conexoes
     
-    def _on_logs_status_changed(self, num_logs: int):
-        """Callback quando o status dos logs muda."""
-        self.status_sistema["logs"] = num_logs
+
     
     def _on_notificacao(self, dados: Dict[str, Any]):
         """Callback para notificações."""
@@ -327,7 +307,6 @@ class Dashboard(ttk.Frame):
             criar_tooltip(self.lbl_status_planka, "Status atual do Planka")
             criar_tooltip(self.lbl_status_conexao, "Número de conexões SSH ativas")
             criar_tooltip(self.lbl_status_db, "Status da base de dados do Planka")
-            criar_tooltip(self.lbl_status_logs, "Número total de logs registrados")
             
             # Tooltip para notificação
             criar_tooltip(self.btn_fechar_notif, "Fechar notificação atual")
@@ -376,10 +355,6 @@ class Dashboard(ttk.Frame):
             self.abas["servidores"] = AbaServidores(self.notebook, self.log_manager, self.settings)
             self.notebook.add(self.abas["servidores"], text="🖥️ Servidores")
             
-            # Aba Logs
-            self.abas["logs"] = AbaLogs(self.notebook, self.log_manager, self.settings)
-            self.notebook.add(self.abas["logs"], text="📋 Logs")
-            
             # Definir aba atual
             self.aba_atual = "principal"
             
@@ -396,7 +371,7 @@ class Dashboard(ttk.Frame):
             indice_ativo = self.notebook.index(self.notebook.select())
             
             # Mapear índice para nome da aba
-            nomes_abas = ["principal", "base_dados", "servidores", "logs"]
+            nomes_abas = ["principal", "base_dados", "servidores"]
             if 0 <= indice_ativo < len(nomes_abas):
                 self.aba_atual = nomes_abas[indice_ativo]
                 self.log_manager.log_sistema("INFO", f"Aba ativa: {self.aba_atual}")
@@ -444,18 +419,6 @@ class Dashboard(ttk.Frame):
             self.lbl_status_db.config(text=f"Base de Dados: {status}")
         except Exception as e:
             self.log_manager.log_sistema("ERROR", f"Erro ao atualizar status da base de dados: {e}")
-    
-    def adicionar_log_console(self, nivel: str, mensagem: str, origem: str = "sistema", 
-                             detalhes: Optional[dict] = None):
-        """Adiciona um log à console global."""
-        if self.console:
-            self.console.adicionar_log(nivel, mensagem, origem, detalhes)
-    
-    def _limpar_console(self):
-        """Limpa a console global."""
-        if self.console:
-            self.console._limpar_console()
-        self.log_manager.log_sistema("INFO", "Console limpa")
     
     def _exportar_logs(self):
         """Exporta logs para arquivo."""
