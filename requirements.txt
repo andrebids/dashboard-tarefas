@@ -1,0 +1,25 @@
+# Interface
+# tkinter (já vem com Python)
+
+# SSH
+paramiko==3.4.0
+
+# Requisições HTTP
+requests==2.31.0
+
+# Agendamento
+schedule==1.2.0
+
+# Criptografia
+cryptography==41.0.0
+
+# PostgreSQL (para gestão da base de dados do Planka)
+psycopg2-binary==2.9.10
+
+# Testes
+pytest==7.4.0
+pytest-cov==4.1.0
+
+# Desenvolvimento
+black==23.7.0
+flake8==6.0.0 

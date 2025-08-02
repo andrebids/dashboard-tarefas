@@ -1,0 +1,37 @@
+{
+    "interface": {
+        "tamanho_janela": "1200x800",
+        "tamanho_minimo": "800x600",
+        "tema": "default",
+        "console_altura": 200
+    },
+    "planka": {
+        "diretorio": "C:\\Users\\Andre\\Desktop\\DEV\\planka-personalizado",
+        "porta": 3000,
+        "url": "http://localhost:3000",
+        "docker_compose_file": "docker-compose.yml"
+    },
+    "database": {
+        "arquivo": "C:\\Users\\Andre\\Desktop\\DEV\\dashboard-tarefas\\database\\dashboard.db",
+        "backup_automatico": true,
+        "backup_intervalo_horas": 24
+    },
+    "logs": {
+        "nivel": "INFO",
+        "max_arquivos": 10,
+        "tamanho_maximo_mb": 10,
+        "diretorio_sistema": "C:\\Users\\Andre\\Desktop\\DEV\\dashboard-tarefas\\logs\\sistema",
+        "diretorio_tarefas": "C:\\Users\\Andre\\Desktop\\DEV\\dashboard-tarefas\\logs\\tarefas",
+        "diretorio_servidores": "C:\\Users\\Andre\\Desktop\\DEV\\dashboard-tarefas\\logs\\servidores"
+    },
+    "servidores": {
+        "timeout_conexao": 30,
+        "max_conexoes": 5,
+        "criptografia": "AES-256"
+    },
+    "tarefas": {
+        "execucao_paralela": false,
+        "max_tarefas_simultaneas": 1,
+        "timeout_execucao": 300
+    }
+}
