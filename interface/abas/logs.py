@@ -1,10 +1,16 @@
 # -*- coding: utf-8 -*-
 """
 Aba Logs - Sistema de Logs Avançado.
+Implementa visualização, filtros, busca e exportação de logs.
 """
 
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, filedialog
+import threading
+from datetime import datetime, timedelta
+from typing import Optional
+
+from core.logs_avancado import LogsAvancadoManager, FiltroLogs, LogEstruturado
 
 
 class AbaLogs(ttk.Frame):
@@ -28,9 +34,17 @@ class AbaLogs(ttk.Frame):
         self.log_manager = log_manager
         self.settings = settings
         
-        self._criar_interface()
+        # Inicializar gerenciador avançado de logs
+        self.logs_avancado = LogsAvancadoManager(settings)
         
-        self.log_manager.log_sistema("SUCCESS", "Aba logs inicializada")
+        # Variáveis de controle
+        self.logs_atual = []
+        self.filtro_atual = FiltroLogs()
+        
+        self._criar_interface()
+        self._carregar_logs()
+        
+        self.log_manager.log_sistema("SUCCESS", "Aba logs avançado inicializada")
     
     def _criar_interface(self):
         """Cria a interface da aba de logs."""
@@ -69,37 +83,153 @@ class AbaLogs(ttk.Frame):
                                     command=self._configurar_logs)
         self.btn_config.pack(side=tk.LEFT, padx=(0, 10))
         
-        # Frame de filtros
-        filtros_frame = ttk.LabelFrame(main_frame, text="Filtros Avançados", padding=10)
+        # Frame de filtros avançados
+        filtros_frame = ttk.LabelFrame(main_frame, text="🔍 Filtros Avançados", padding=10)
         filtros_frame.pack(fill=tk.X, pady=(0, 20))
         
         # Primeira linha de filtros
         linha1 = ttk.Frame(filtros_frame)
         linha1.pack(fill=tk.X, pady=(0, 5))
         
-        ttk.Label(linha1, text="Tipo:").pack(side=tk.LEFT)
-        self.tipo_var = tk.StringVar(value="Todos")
-        self.cb_tipo = ttk.Combobox(linha1, textvariable=self.tipo_var,
-                                   values=["Todos", "sistema", "tarefas", "servidores", "planka"],
-                                   width=12, state="readonly")
-        self.cb_tipo.pack(side=tk.LEFT, padx=(5, 15))
+        # Origem
+        ttk.Label(linha1, text="Origem:").pack(side=tk.LEFT)
+        self.origem_var = tk.StringVar(value="Todos")
+        self.cb_origem = ttk.Combobox(linha1, textvariable=self.origem_var,
+                                     values=["Todos", "sistema", "planka", "servidores", "base_dados", "interface", "tarefas"],
+                                     width=12, state="readonly")
+        self.cb_origem.pack(side=tk.LEFT, padx=(5, 15))
         
+        # Nível
         ttk.Label(linha1, text="Nível:").pack(side=tk.LEFT)
         self.nivel_var = tk.StringVar(value="Todos")
         self.cb_nivel = ttk.Combobox(linha1, textvariable=self.nivel_var,
-                                    values=["Todos", "INFO", "WARNING", "ERROR", "SUCCESS", "DEBUG"],
+                                    values=["Todos", "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL", "SUCCESS"],
                                     width=12, state="readonly")
         self.cb_nivel.pack(side=tk.LEFT, padx=(5, 15))
         
-        ttk.Label(linha1, text="Data Início:").pack(side=tk.LEFT)
+        # Usuário
+        ttk.Label(linha1, text="Usuário:").pack(side=tk.LEFT)
+        self.usuario_var = tk.StringVar()
+        self.entry_usuario = ttk.Entry(linha1, textvariable=self.usuario_var, width=12)
+        self.entry_usuario.pack(side=tk.LEFT, padx=(5, 15))
+        
+        # Sessão
+        ttk.Label(linha1, text="Sessão:").pack(side=tk.LEFT)
+        self.sessao_var = tk.StringVar()
+        self.entry_sessao = ttk.Entry(linha1, textvariable=self.sessao_var, width=12)
+        self.entry_sessao.pack(side=tk.LEFT, padx=(5, 15))
+        
+        # Segunda linha de filtros
+        linha2 = ttk.Frame(filtros_frame)
+        linha2.pack(fill=tk.X, pady=(0, 5))
+        
+        # Data Início
+        ttk.Label(linha2, text="Data Início:").pack(side=tk.LEFT)
         self.data_inicio_var = tk.StringVar()
-        self.entry_data_inicio = ttk.Entry(linha1, textvariable=self.data_inicio_var, width=12)
+        self.entry_data_inicio = ttk.Entry(linha2, textvariable=self.data_inicio_var, width=12)
         self.entry_data_inicio.pack(side=tk.LEFT, padx=(5, 15))
         
-        ttk.Label(linha1, text="Data Fim:").pack(side=tk.LEFT)
+        # Data Fim
+        ttk.Label(linha2, text="Data Fim:").pack(side=tk.LEFT)
         self.data_fim_var = tk.StringVar()
-        self.entry_data_fim = ttk.Entry(linha1, textvariable=self.data_fim_var, width=12)
+        self.entry_data_fim = ttk.Entry(linha2, textvariable=self.data_fim_var, width=12)
         self.entry_data_fim.pack(side=tk.LEFT, padx=(5, 15))
+        
+        # Busca de texto
+        ttk.Label(linha2, text="Buscar:").pack(side=tk.LEFT)
+        self.busca_var = tk.StringVar()
+        self.entry_busca = ttk.Entry(linha2, textvariable=self.busca_var, width=20)
+        self.entry_busca.pack(side=tk.LEFT, padx=(5, 15))
+        
+        # Limite
+        ttk.Label(linha2, text="Limite:").pack(side=tk.LEFT)
+        self.limite_var = tk.StringVar(value="1000")
+        self.entry_limite = ttk.Entry(linha2, textvariable=self.limite_var, width=8)
+        self.entry_limite.pack(side=tk.LEFT, padx=(5, 15))
+        
+        # Botões de filtro
+        linha3 = ttk.Frame(filtros_frame)
+        linha3.pack(fill=tk.X, pady=(5, 0))
+        
+        self.btn_aplicar_filtros = ttk.Button(linha3, text="🔍 Aplicar Filtros", 
+                                             command=self._aplicar_filtros)
+        self.btn_aplicar_filtros.pack(side=tk.LEFT, padx=(0, 10))
+        
+        self.btn_limpar_filtros = ttk.Button(linha3, text="🧹 Limpar Filtros", 
+                                            command=self._limpar_filtros)
+        self.btn_limpar_filtros.pack(side=tk.LEFT, padx=(0, 10))
+        
+        self.btn_busca_rapida = ttk.Button(linha3, text="⚡ Busca Rápida", 
+                                          command=self._busca_rapida)
+        self.btn_busca_rapida.pack(side=tk.LEFT, padx=(0, 10))
+        
+        # Frame de estatísticas
+        stats_frame = ttk.LabelFrame(main_frame, text="📊 Estatísticas", padding=10)
+        stats_frame.pack(fill=tk.X, pady=(0, 20))
+        
+        # Estatísticas em linha
+        stats_linha = ttk.Frame(stats_frame)
+        stats_linha.pack(fill=tk.X)
+        
+        self.lbl_total_logs = ttk.Label(stats_linha, text="Total: 0")
+        self.lbl_total_logs.pack(side=tk.LEFT, padx=(0, 20))
+        
+        self.lbl_logs_hoje = ttk.Label(stats_linha, text="Hoje: 0")
+        self.lbl_logs_hoje.pack(side=tk.LEFT, padx=(0, 20))
+        
+        self.lbl_erros = ttk.Label(stats_linha, text="Erros: 0")
+        self.lbl_erros.pack(side=tk.LEFT, padx=(0, 20))
+        
+        self.lbl_warnings = ttk.Label(stats_linha, text="Warnings: 0")
+        self.lbl_warnings.pack(side=tk.LEFT, padx=(0, 20))
+        
+        self.lbl_sucessos = ttk.Label(stats_linha, text="Sucessos: 0")
+        self.lbl_sucessos.pack(side=tk.LEFT, padx=(0, 20))
+        
+        # Frame de visualização de logs
+        logs_frame = ttk.LabelFrame(main_frame, text="📋 Logs", padding=10)
+        logs_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # TreeView para logs
+        colunas = ("ID", "Timestamp", "Nível", "Origem", "Mensagem", "Usuário", "Sessão")
+        self.tree_logs = ttk.Treeview(logs_frame, columns=colunas, show="headings", height=15)
+        
+        # Configurar colunas
+        self.tree_logs.heading("ID", text="ID")
+        self.tree_logs.heading("Timestamp", text="Data/Hora")
+        self.tree_logs.heading("Nível", text="Nível")
+        self.tree_logs.heading("Origem", text="Origem")
+        self.tree_logs.heading("Mensagem", text="Mensagem")
+        self.tree_logs.heading("Usuário", text="Usuário")
+        self.tree_logs.heading("Sessão", text="Sessão")
+        
+        # Configurar larguras
+        self.tree_logs.column("ID", width=50)
+        self.tree_logs.column("Timestamp", width=150)
+        self.tree_logs.column("Nível", width=80)
+        self.tree_logs.column("Origem", width=100)
+        self.tree_logs.column("Mensagem", width=300)
+        self.tree_logs.column("Usuário", width=100)
+        self.tree_logs.column("Sessão", width=100)
+        
+        # Scrollbar
+        scrollbar = ttk.Scrollbar(logs_frame, orient=tk.VERTICAL, command=self.tree_logs.yview)
+        self.tree_logs.configure(yscrollcommand=scrollbar.set)
+        
+        # Layout
+        self.tree_logs.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        # Eventos
+        self.tree_logs.bind("<<TreeviewSelect>>", self._on_log_selecionado)
+        self.tree_logs.bind("<Double-1>", self._on_log_double_click)
+        
+        # Frame de detalhes
+        detalhes_frame = ttk.LabelFrame(main_frame, text="🔍 Detalhes do Log", padding=10)
+        detalhes_frame.pack(fill=tk.X, pady=(10, 0))
+        
+        self.text_detalhes = tk.Text(detalhes_frame, height=6, wrap=tk.WORD)
+        self.text_detalhes.pack(fill=tk.BOTH, expand=True)
         
         # Segunda linha de filtros
         linha2 = ttk.Frame(filtros_frame)
