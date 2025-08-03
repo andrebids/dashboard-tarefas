@@ -8,6 +8,7 @@ import subprocess
 import time
 import shutil
 import secrets
+import os
 from typing import Tuple, Dict
 from pathlib import Path
 
@@ -26,6 +27,56 @@ class ProductionManager:
         """
         self.settings = settings
         self.planka_dir = Path(settings.obter("planka", "diretorio"))
+    
+    def _limpar_arquivos_corrompidos(self) -> bool:
+        """
+        Remove arquivos corrompidos que podem causar problemas no build.
+        
+        Returns:
+            True se sucesso, False caso contrário
+        """
+        try:
+            self._adicionar_log("🧹 LIMPANDO ARQUIVOS CORROMPIDOS...")
+            
+            # Diretórios que podem conter arquivos corrompidos
+            diretorios_para_limpar = [
+                "server/.venv",
+                "server/node_modules", 
+                "client/node_modules"
+            ]
+            
+            for diretorio in diretorios_para_limpar:
+                caminho = self.planka_dir / diretorio
+                if caminho.exists():
+                    self._adicionar_log(f"  • Removendo {diretorio}...")
+                    try:
+                        shutil.rmtree(caminho, ignore_errors=True)
+                        self._adicionar_log(f"  ✅ {diretorio} removido")
+                    except Exception as e:
+                        self._adicionar_log(f"  ⚠️ Erro ao remover {diretorio}: {e}")
+                else:
+                    self._adicionar_log(f"  • {diretorio} não existe")
+            
+            # Verificar se há arquivos Python corrompidos (tamanho 0)
+            self._adicionar_log("  • Verificando arquivos Python corrompidos...")
+            for root, dirs, files in os.walk(self.planka_dir):
+                for file in files:
+                    if file.endswith('.py') or file == 'python':
+                        file_path = Path(root) / file
+                        try:
+                            if file_path.stat().st_size == 0:
+                                self._adicionar_log(f"  ⚠️ Arquivo corrompido encontrado: {file_path}")
+                                file_path.unlink()
+                                self._adicionar_log(f"  ✅ Arquivo corrompido removido: {file_path}")
+                        except Exception as e:
+                            pass  # Ignorar erros de acesso
+            
+            self._adicionar_log("  ✅ Limpeza de arquivos corrompidos concluída")
+            return True
+            
+        except Exception as e:
+            self._adicionar_log(f"  ❌ Erro na limpeza de arquivos corrompidos: {e}")
+            return False
     
     def executar_producao_com_modificacoes_locais(self) -> Tuple[bool, str]:
         """
@@ -452,6 +503,55 @@ class ProductionManager:
             self._adicionar_log(f"❌ Erro ao criar configuração: {e}")
             return False
     
+    def _verificar_integridade_arquivos(self) -> bool:
+        """
+        Verifica a integridade dos arquivos antes do build.
+        
+        Returns:
+            True se todos os arquivos estão íntegros, False caso contrário
+        """
+        try:
+            self._adicionar_log("🔍 VERIFICANDO INTEGRIDADE DOS ARQUIVOS...")
+            
+            # Verificar arquivos essenciais
+            arquivos_essenciais = [
+                "docker-compose-local.yml",
+                "Dockerfile",
+                "server/package.json",
+                "client/package.json",
+                "server/requirements.txt"
+            ]
+            
+            for arquivo in arquivos_essenciais:
+                caminho = self.planka_dir / arquivo
+                if not caminho.exists():
+                    self._adicionar_log(f"  ❌ Arquivo essencial não encontrado: {arquivo}")
+                    return False
+                
+                # Verificar se o arquivo não está vazio
+                if caminho.stat().st_size == 0:
+                    self._adicionar_log(f"  ❌ Arquivo essencial vazio: {arquivo}")
+                    return False
+                
+                self._adicionar_log(f"  ✅ {arquivo} - OK")
+            
+            # Verificar espaço em disco
+            total, usado, livre = shutil.disk_usage(self.planka_dir)
+            livre_gb = livre / (1024**3)
+            self._adicionar_log(f"  • Espaço livre em disco: {livre_gb:.2f} GB")
+            
+            if livre_gb < 5:
+                self._adicionar_log(f"  ⚠️ Pouco espaço em disco ({livre_gb:.2f} GB)")
+                self._adicionar_log(f"  💡 Recomendado: pelo menos 5 GB livre")
+                return False
+            
+            self._adicionar_log("  ✅ Verificação de integridade concluída")
+            return True
+            
+        except Exception as e:
+            self._adicionar_log(f"  ❌ Erro na verificação de integridade: {e}")
+            return False
+
     def _fazer_build_producao(self) -> bool:
         """
         Faz build da imagem de produção.
@@ -462,6 +562,14 @@ class ProductionManager:
         try:
             self._adicionar_log("  • Iniciando processo de build...")
             
+            # Verificar integridade dos arquivos antes do build
+            if not self._verificar_integridade_arquivos():
+                self._adicionar_log("  ❌ Verificação de integridade falhou")
+                return False
+            
+            # Limpar arquivos corrompidos antes do build
+            self._limpar_arquivos_corrompidos()
+
             comando = ["docker-compose", "-f", "docker-compose-local.yml", "build", "--no-cache"]
             self._adicionar_log(f"  • Comando completo: {' '.join(comando)}")
             self._adicionar_log(f"  • Diretório de trabalho: {self.planka_dir}")
