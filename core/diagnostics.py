@@ -103,8 +103,7 @@ class DiagnosticManager:
             resultado = subprocess.run(
                 ["docker", "info"], 
                 capture_output=True, 
-                text=True, 
-                timeout=5
+                text=True, encoding='utf-8', errors='replace'
             )
             docker_ok = resultado.returncode == 0
             if not docker_ok:
@@ -161,8 +160,7 @@ class DiagnosticManager:
                 ["docker-compose", "-f", "docker-compose-local.yml", "down"],
                 cwd=dir_planka,
                 capture_output=True,
-                text=True,
-                timeout=30
+                text=True, encoding='utf-8', errors='replace'
             )
             
             # Parar containers de desenvolvimento
@@ -170,24 +168,21 @@ class DiagnosticManager:
                 ["docker-compose", "-f", "docker-compose-dev.yml", "down"],
                 cwd=dir_planka,
                 capture_output=True,
-                text=True,
-                timeout=30
+                text=True, encoding='utf-8', errors='replace'
             )
             
             # 2. Limpar containers órfãos
             subprocess.run(
                 ["docker", "container", "prune", "-f"],
                 capture_output=True,
-                text=True,
-                timeout=30
+                text=True, encoding='utf-8', errors='replace'
             )
             
             # 3. Limpar redes não utilizadas
             subprocess.run(
                 ["docker", "network", "prune", "-f"],
                 capture_output=True,
-                text=True,
-                timeout=30
+                text=True, encoding='utf-8', errors='replace'
             )
             
             # 4. Aguardar um pouco
@@ -307,8 +302,7 @@ class DiagnosticManager:
             resultado = subprocess.run(
                 ["docker", "stats", "--no-stream", "--format", "table {{.Container}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.NetIO}}"],
                 capture_output=True,
-                text=True,
-                timeout=10
+                text=True, encoding='utf-8', errors='replace'
             )
             
             if resultado.returncode == 0:

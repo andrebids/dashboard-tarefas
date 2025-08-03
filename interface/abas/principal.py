@@ -92,4 +92,38 @@ class AbaPrincipal(ttk.Frame):
         try:
             self.controller.executar_diagnostico_completo()
         except Exception as e:
-            self.log_manager.log_sistema("ERROR", f"Erro ao executar diagnóstico completo: {str(e)}") 
+            self.log_manager.log_sistema("ERROR", f"Erro ao executar diagnóstico completo: {str(e)}")
+    
+    def sincronizar_producao_com_desenvolvimento(self):
+        """Sincroniza a versão de produção com a de desenvolvimento."""
+        try:
+            self.controller.sincronizar_producao_com_desenvolvimento()
+        except Exception as e:
+            self.log_manager.log_sistema("ERROR", f"Erro ao sincronizar produção com desenvolvimento: {str(e)}")
+    
+    def restaurar_producao_original(self):
+        """Restaura a versão de produção original."""
+        try:
+            self.controller.restaurar_producao_original()
+        except Exception as e:
+            self.log_manager.log_sistema("ERROR", f"Erro ao restaurar produção original: {str(e)}")
+    
+    def verificar_sincronizacao_producao(self):
+        """Verifica se a produção está sincronizada com desenvolvimento."""
+        try:
+            return self.controller.verificar_sincronizacao_producao()
+        except Exception as e:
+            self.log_manager.log_sistema("ERROR", f"Erro ao verificar sincronização: {str(e)}")
+            return {
+                "sincronizada": False,
+                "motivo": f"Erro ao verificar: {str(e)}",
+                "backup_existe": False,
+                "modo_atual": "erro"
+            }
+    
+    def configurar_producao_sempre_desenvolvimento(self):
+        """Configura produção para sempre usar desenvolvimento."""
+        try:
+            self.controller.configurar_producao_sempre_desenvolvimento()
+        except Exception as e:
+            self.log_manager.log_sistema("ERROR", f"Erro ao configurar produção: {str(e)}") 

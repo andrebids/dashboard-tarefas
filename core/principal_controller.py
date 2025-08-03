@@ -5,6 +5,7 @@ Controlador Principal - Coordenação dos componentes da aba principal.
 import tkinter as tk
 from tkinter import ttk, messagebox
 import threading
+import time
 from typing import Dict, Callable, Optional
 
 class PrincipalController:
@@ -44,6 +45,7 @@ class PrincipalController:
             from interface.componentes.diagnostic_panel import DiagnosticPanel
             from interface.componentes.repository_manager import RepositoryManager as RepoManagerUI
             from interface.componentes.status_monitor import StatusMonitor
+            from interface.componentes.sync_manager import SyncManager
             
             self.PlankaManager = PlankaManager
             self.DiagnosticManager = DiagnosticManager
@@ -54,6 +56,7 @@ class PrincipalController:
             self.DiagnosticPanel = DiagnosticPanel
             self.RepoManagerUI = RepoManagerUI
             self.StatusMonitor = StatusMonitor
+            self.SyncManager = SyncManager
             
         except ImportError as e:
             messagebox.showerror("Erro de Importação", f"Erro ao importar módulos: {str(e)}")
@@ -117,6 +120,13 @@ class PrincipalController:
             )
             self.status_monitor.obter_widget().pack(fill=tk.BOTH, expand=True, pady=(0, 10))
             
+            # Componente de sincronização produção/desenvolvimento
+            self.sync_manager = self.SyncManager(
+                self.frame_esquerdo,
+                self
+            )
+            self.sync_manager.pack(fill=tk.X, pady=(0, 10))
+            
             # Componente de gestão de repositório
             self.repo_manager_ui = self.RepoManagerUI(
                 self.frame_esquerdo,
@@ -152,39 +162,49 @@ class PrincipalController:
             print(f"Erro ao configurar callbacks: {str(e)}")
     
     def _verificar_status_inicial(self):
-        """Verifica o status inicial do sistema."""
+        """Verifica o status inicial do sistema de forma otimizada."""
         try:
-            # Executar verificação em thread separada
+            # Executar verificação em thread separada com delay
             threading.Thread(target=self._executar_verificacao_inicial, daemon=True).start()
             
         except Exception as e:
             self._callback_adicionar_log(f"Erro na verificação inicial: {str(e)}", "error")
     
     def _executar_verificacao_inicial(self):
-        """Executa a verificação inicial em thread separada."""
+        """Executa a verificação inicial em thread separada com otimizações."""
         try:
+            # Aguardar um pouco para não interferir na inicialização da UI
+            time.sleep(1)
+            
             self._callback_adicionar_log("Iniciando verificação do sistema...", "info")
             
-            # Verificar status do Planka
-            status_info = self.status_checker.verificar_status_inicial()
+            # Verificar status do Planka (com timeout reduzido)
+            try:
+                status_info = self.status_checker.verificar_status_inicial()
+                self._callback_adicionar_log(f"Status do Planka: {status_info.get('status', 'Desconhecido')}", "info")
+            except Exception as e:
+                self._callback_adicionar_log(f"Erro ao verificar status do Planka: {str(e)}", "warning")
             
-            # Verificar dependências
-            dependencias = self.repository_manager.verificar_dependencias()
-            
-            # Log dos resultados
-            self._callback_adicionar_log("=== VERIFICAÇÃO INICIAL ===", "info")
-            self._callback_adicionar_log(f"Status do Planka: {status_info.get('status', 'Desconhecido')}", "info")
-            self._callback_adicionar_log(f"Modo: {status_info.get('modo', 'desconhecido')}", "info")
-            
-            # Verificar dependências
-            todas_disponiveis = all(dependencias.values())
-            if todas_disponiveis:
-                self._callback_adicionar_log("Todas as dependências estão disponíveis", "success")
-            else:
-                self._callback_adicionar_log("Algumas dependências estão em falta", "warning")
-                for dep, disponivel in dependencias.items():
-                    if not disponivel:
-                        self._callback_adicionar_log(f"  - {dep}: Não encontrado", "error")
+            # Verificar dependências (usando cache para evitar verificações constantes)
+            try:
+                dependencias = self.repository_manager.verificar_dependencias()
+                
+                todas_disponiveis = all(dependencias.values())
+                if todas_disponiveis:
+                    self._callback_adicionar_log("Todas as dependências estão disponíveis", "success")
+                else:
+                    self._callback_adicionar_log("Algumas dependências estão em falta", "warning")
+                    for dep, disponivel in dependencias.items():
+                        if not disponivel:
+                            self._callback_adicionar_log(f"  - {dep}: Não encontrado", "error")
+                
+                # Informar sobre o cache se disponível
+                info_cache = self.planka_manager.obter_info_cache_dependencias()
+                if info_cache.get("cache_existe"):
+                    self._callback_adicionar_log("Cache de dependências ativo - verificações otimizadas", "info")
+                    
+            except Exception as e:
+                self._callback_adicionar_log(f"Erro ao verificar dependências: {str(e)}", "warning")
             
             self._callback_adicionar_log("Verificação inicial concluída", "info")
             
@@ -266,4 +286,70 @@ class PrincipalController:
         try:
             self.diagnostic_panel._diagnostico_completo()
         except Exception as e:
-            self._callback_adicionar_log(f"Erro ao executar diagnóstico completo: {str(e)}", "error") 
+            self._callback_adicionar_log(f"Erro ao executar diagnóstico completo: {str(e)}", "error")
+    
+    def sincronizar_producao_com_desenvolvimento(self):
+        """Sincroniza a versão de produção com a de desenvolvimento."""
+        try:
+            self._callback_adicionar_log("Iniciando sincronização de produção com desenvolvimento...", "info")
+            
+            # Executar sincronização
+            sucesso, mensagem = self.planka_manager.sincronizar_producao_com_desenvolvimento()
+            
+            if sucesso:
+                self._callback_adicionar_log(f"✅ {mensagem}", "success")
+                self._callback_adicionar_log("A versão de produção agora usa o mesmo código da versão de desenvolvimento", "info")
+                self._callback_adicionar_log("Reinicie o Planka para aplicar as mudanças", "warning")
+            else:
+                self._callback_adicionar_log(f"❌ Erro na sincronização: {mensagem}", "error")
+                
+        except Exception as e:
+            self._callback_adicionar_log(f"Erro ao sincronizar produção com desenvolvimento: {str(e)}", "error")
+    
+    def restaurar_producao_original(self):
+        """Restaura a versão de produção original."""
+        try:
+            self._callback_adicionar_log("Restaurando versão de produção original...", "info")
+            
+            # Executar restauração
+            sucesso, mensagem = self.planka_manager.restaurar_producao_original()
+            
+            if sucesso:
+                self._callback_adicionar_log(f"✅ {mensagem}", "success")
+                self._callback_adicionar_log("A versão de produção voltou a usar a imagem oficial", "info")
+                self._callback_adicionar_log("Reinicie o Planka para aplicar as mudanças", "warning")
+            else:
+                self._callback_adicionar_log(f"❌ Erro na restauração: {mensagem}", "error")
+                
+        except Exception as e:
+            self._callback_adicionar_log(f"Erro ao restaurar produção original: {str(e)}", "error")
+    
+    def verificar_sincronizacao_producao(self) -> Dict:
+        """Verifica se a produção está sincronizada com desenvolvimento."""
+        try:
+            return self.planka_manager.verificar_sincronizacao_producao()
+        except Exception as e:
+            return {
+                "sincronizada": False,
+                "motivo": f"Erro ao verificar: {str(e)}",
+                "backup_existe": False,
+                "modo_atual": "erro"
+            }
+    
+    def configurar_producao_sempre_desenvolvimento(self):
+        """Configura produção para sempre usar desenvolvimento."""
+        try:
+            self._callback_adicionar_log("Configurando produção para sempre usar desenvolvimento...", "info")
+            
+            # Executar configuração
+            sucesso, mensagem = self.planka_manager.configurar_producao_sempre_desenvolvimento()
+            
+            if sucesso:
+                self._callback_adicionar_log(f"✅ {mensagem}", "success")
+                self._callback_adicionar_log("A partir de agora, produção sempre usará código de desenvolvimento", "info")
+                self._callback_adicionar_log("Reinicie o Planka para aplicar as mudanças", "warning")
+            else:
+                self._callback_adicionar_log(f"❌ Erro na configuração: {mensagem}", "error")
+                
+        except Exception as e:
+            self._callback_adicionar_log(f"Erro ao configurar produção: {str(e)}", "error") 

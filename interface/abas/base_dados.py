@@ -9,6 +9,8 @@ import threading
 from pathlib import Path
 import sys
 import os
+import time
+from typing import Dict
 
 # Importar o PlankaDatabaseManager
 sys.path.append(str(Path(__file__).parent.parent.parent))
@@ -104,48 +106,24 @@ class AbaBaseDados(ttk.Frame):
         botoes_frame = ttk.Frame(acoes_frame)
         botoes_frame.pack(fill=tk.X)
         
-        # Primeira linha de botões
-        linha1 = ttk.Frame(botoes_frame)
-        linha1.pack(fill=tk.X, pady=(0, 10))
+        # Linha de botões principais
+        linha_botoes = ttk.Frame(botoes_frame)
+        linha_botoes.pack(fill=tk.X, pady=(0, 10))
         
-        # Botão Criar Base de Dados
-        self.btn_criar = ttk.Button(linha1, text="🆕 Criar Base de Dados", 
-                                    command=self._criar_base_dados)
-        self.btn_criar.pack(side=tk.LEFT, padx=(0, 10))
-        
-        # Botão Inicializar Base
-        self.btn_inicializar = ttk.Button(linha1, text="⚙️ Inicializar Base", 
-                                          command=self._inicializar_base_dados)
-        self.btn_inicializar.pack(side=tk.LEFT, padx=(0, 10))
-        
-        # Botão Editor
-        self.btn_editor = ttk.Button(linha1, text="✏️ Abrir Editor", 
-                                     command=self._abrir_editor)
-        self.btn_editor.pack(side=tk.LEFT, padx=(0, 10))
-        
-        # Segunda linha de botões
-        linha2 = ttk.Frame(botoes_frame)
-        linha2.pack(fill=tk.X, pady=(0, 10))
+        # Botão Diagnóstico
+        self.btn_diagnostico = ttk.Button(linha_botoes, text="🔍 Diagnóstico Completo", 
+                                          command=self._executar_diagnostico)
+        self.btn_diagnostico.pack(side=tk.LEFT, padx=(0, 10))
         
         # Botão Backup
-        self.btn_backup = ttk.Button(linha2, text="💾 Fazer Backup", 
+        self.btn_backup = ttk.Button(linha_botoes, text="💾 Fazer Backup", 
                                      command=self._fazer_backup)
         self.btn_backup.pack(side=tk.LEFT, padx=(0, 10))
         
-        # Botão Upload
-        self.btn_upload = ttk.Button(linha2, text="📤 Upload Backup", 
-                                     command=self._upload_backup)
-        self.btn_upload.pack(side=tk.LEFT, padx=(0, 10))
-        
-        # Botão Restaurar
-        self.btn_restaurar = ttk.Button(linha2, text="🔄 Restaurar", 
-                                        command=self._restaurar_backup)
+        # Botão Restaurar (melhorado)
+        self.btn_restaurar = ttk.Button(linha_botoes, text="🔄 Restaurar Backup", 
+                                        command=self._restaurar_backup_melhorado)
         self.btn_restaurar.pack(side=tk.LEFT, padx=(0, 10))
-        
-        # Botão Substituir
-        self.btn_substituir = ttk.Button(linha2, text="🔄 Substituir Base", 
-                                         command=self._substituir_base)
-        self.btn_substituir.pack(side=tk.LEFT, padx=(0, 10))
         
         # Frame de progresso (inicialmente oculto)
         self.progress_frame = ttk.Frame(main_frame)
@@ -247,14 +225,15 @@ class AbaBaseDados(ttk.Frame):
         try:
             conectividade = self.db_manager.verificar_conectividade()
             
-            # Botões que precisam de PostgreSQL rodando
-            self.btn_criar.config(state="normal" if conectividade["postgres_running"] else "disabled")
-            
             # Botões que precisam de base existente
             base_existe = conectividade["database_exists"]
-            self.btn_inicializar.config(state="normal" if base_existe else "disabled")
             self.btn_backup.config(state="normal" if base_existe else "disabled")
-            self.btn_editor.config(state="normal" if base_existe else "disabled")
+            
+            # Botão de diagnóstico sempre disponível
+            self.btn_diagnostico.config(state="normal")
+            
+            # Botão de restaurar sempre disponível (pode restaurar mesmo sem base)
+            self.btn_restaurar.config(state="normal")
             
         except Exception as e:
             self.log_manager.log_sistema("ERROR", f"Erro ao atualizar estado dos botões: {e}")
@@ -330,17 +309,9 @@ class AbaBaseDados(ttk.Frame):
 
     
     def _abrir_editor(self):
-        """Abre o editor de base de dados."""
+        """Abre o editor de base de dados (pgAdmin no navegador)."""
         try:
-            # Diálogo para escolher editor
-            editor = messagebox.askyesno("Editor", 
-                                       "Deseja abrir o pgAdmin no navegador?\n\n"
-                                       "Sim = pgAdmin (navegador)\n"
-                                       "Não = DBeaver (aplicação)")
-            
-            editor_nome = "pgadmin" if editor else "dbeaver"
-            
-            sucesso, mensagem = self.db_manager.conectar_editor(editor_nome)
+            sucesso, mensagem = self.db_manager.conectar_editor("pgadmin")
             
             if sucesso:
                 self.log_manager.log_sistema("SUCCESS", mensagem)
@@ -385,6 +356,150 @@ class AbaBaseDados(ttk.Frame):
             self._ocultar_progresso()
             self.log_manager.log_sistema("ERROR", f"Erro inesperado: {e}")
             messagebox.showerror("Erro", f"Erro inesperado: {e}")
+    
+    def _executar_diagnostico(self):
+        """Executa diagnóstico completo da base de dados."""
+        if self.thread_operacao and self.thread_operacao.is_alive():
+            messagebox.showwarning("Aviso", "Operação em andamento. Aguarde...")
+            return
+        
+        self.thread_operacao = threading.Thread(target=self._executar_diagnostico_background)
+        self.thread_operacao.daemon = True
+        self.thread_operacao.start()
+    
+    def _executar_diagnostico_background(self):
+        """Executa diagnóstico em thread separada."""
+        try:
+            self._mostrar_progresso("Executando diagnóstico completo...")
+            self.log_manager.log_sistema("INFO", "Iniciando diagnóstico da base de dados...")
+            
+            # Importar o módulo de diagnóstico
+            from core.diagnostic_database import DatabaseDiagnostic
+            
+            # Executar diagnóstico
+            diagnostic = DatabaseDiagnostic(self.settings)
+            resultado = diagnostic.executar_diagnostico_completo()
+            
+            # Gerar relatório
+            relatorio = diagnostic.gerar_relatorio(resultado)
+            
+            self._ocultar_progresso()
+            
+            # Salvar relatório em arquivo
+            timestamp = time.strftime("%Y%m%d_%H%M%S")
+            relatorio_file = Path(self.settings.obter("logs", "diretorio_sistema")) / f"diagnostico_db_{timestamp}.txt"
+            
+            try:
+                relatorio_file.parent.mkdir(parents=True, exist_ok=True)
+                with open(relatorio_file, 'w', encoding='utf-8') as f:
+                    f.write(relatorio)
+                
+                self.log_manager.log_sistema("SUCCESS", f"Diagnóstico concluído. Relatório salvo em: {relatorio_file}")
+                
+                # Mostrar relatório em janela
+                self._mostrar_relatorio_diagnostico(relatorio, resultado)
+                
+            except Exception as e:
+                self.log_manager.log_sistema("ERROR", f"Erro ao salvar relatório: {e}")
+                messagebox.showerror("Erro", f"Erro ao salvar relatório: {e}")
+                
+        except Exception as e:
+            self._ocultar_progresso()
+            self.log_manager.log_sistema("ERROR", f"Erro no diagnóstico: {e}")
+            messagebox.showerror("Erro", f"Erro no diagnóstico: {e}")
+    
+    def _mostrar_relatorio_diagnostico(self, relatorio: str, resultado: Dict):
+        """Mostra o relatório de diagnóstico em uma janela."""
+        # Criar janela de relatório
+        janela_relatorio = tk.Toplevel(self)
+        janela_relatorio.title("Diagnóstico da Base de Dados")
+        janela_relatorio.geometry("800x600")
+        janela_relatorio.resizable(True, True)
+        
+        # Frame principal
+        main_frame = ttk.Frame(janela_relatorio)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        # Título
+        ttk.Label(main_frame, text="🔍 Relatório de Diagnóstico", 
+                  font=("Arial", 14, "bold")).pack(pady=(0, 10))
+        
+        # Text widget para o relatório
+        text_frame = ttk.Frame(main_frame)
+        text_frame.pack(fill=tk.BOTH, expand=True)
+        
+        text_widget = tk.Text(text_frame, wrap=tk.WORD, font=("Consolas", 9))
+        scrollbar = ttk.Scrollbar(text_frame, orient="vertical", command=text_widget.yview)
+        text_widget.configure(yscrollcommand=scrollbar.set)
+        
+        text_widget.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        # Inserir relatório
+        text_widget.insert(tk.END, relatorio)
+        text_widget.config(state=tk.DISABLED)  # Tornar somente leitura
+        
+        # Frame de botões
+        botoes_frame = ttk.Frame(main_frame)
+        botoes_frame.pack(fill=tk.X, pady=(10, 0))
+        
+        # Botão para copiar relatório
+        ttk.Button(botoes_frame, text="📋 Copiar Relatório", 
+                  command=lambda: self._copiar_relatorio(text_widget)).pack(side=tk.LEFT, padx=(0, 10))
+        
+        # Botão para fechar
+        ttk.Button(botoes_frame, text="❌ Fechar", 
+                  command=janela_relatorio.destroy).pack(side=tk.RIGHT)
+        
+        # Mostrar resumo dos problemas se houver
+        if resultado["problemas"]:
+            self._mostrar_resumo_problemas(janela_relatorio, resultado)
+    
+    def _copiar_relatorio(self, text_widget):
+        """Copia o relatório para a área de transferência."""
+        try:
+            relatorio = text_widget.get(1.0, tk.END)
+            self.clipboard_clear()
+            self.clipboard_append(relatorio)
+            messagebox.showinfo("Sucesso", "Relatório copiado para a área de transferência!")
+        except Exception as e:
+            messagebox.showerror("Erro", f"Erro ao copiar relatório: {e}")
+    
+    def _mostrar_resumo_problemas(self, parent, resultado: Dict):
+        """Mostra um resumo dos problemas encontrados."""
+        # Criar janela de resumo
+        janela_resumo = tk.Toplevel(parent)
+        janela_resumo.title("Resumo dos Problemas")
+        janela_resumo.geometry("500x400")
+        janela_resumo.resizable(True, True)
+        
+        # Frame principal
+        main_frame = ttk.Frame(janela_resumo)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        # Título
+        ttk.Label(main_frame, text="🚨 Problemas Encontrados", 
+                  font=("Arial", 12, "bold")).pack(pady=(0, 10))
+        
+        # Lista de problemas
+        if resultado["problemas"]:
+            for i, problema in enumerate(resultado["problemas"], 1):
+                ttk.Label(main_frame, text=f"{i}. {problema}", 
+                          font=("Arial", 10)).pack(anchor="w", pady=2)
+        
+        # Recomendações
+        if resultado["recomendacoes"]:
+            ttk.Label(main_frame, text="", font=("Arial", 10)).pack(pady=10)
+            ttk.Label(main_frame, text="💡 Recomendações:", 
+                      font=("Arial", 12, "bold")).pack(pady=(0, 10))
+            
+            for i, recomendacao in enumerate(resultado["recomendacoes"], 1):
+                ttk.Label(main_frame, text=f"{i}. {recomendacao}", 
+                          font=("Arial", 10)).pack(anchor="w", pady=2)
+        
+        # Botão fechar
+        ttk.Button(main_frame, text="❌ Fechar", 
+                  command=janela_resumo.destroy).pack(pady=(20, 0))
     
     def _upload_backup(self):
         """Faz upload de um arquivo de backup."""
@@ -456,8 +571,57 @@ class AbaBaseDados(ttk.Frame):
             messagebox.showerror("Erro", f"Erro ao validar arquivo: {e}")
             return False
     
+    def _restaurar_backup_melhorado(self):
+        """Restaura um backup com opção de escolher arquivo específico."""
+        # Criar janela de diálogo para escolher o arquivo
+        arquivo_backup = filedialog.askopenfilename(
+            title="Escolher arquivo de backup para restaurar",
+            filetypes=[
+                ("Arquivos SQL", "*.sql"),
+                ("Arquivos de backup", "*.backup"),
+                ("Arquivos comprimidos", "*.gz"),
+                ("Todos os arquivos", "*.*")
+            ],
+            initialdir=Path.home() / "Downloads"  # Começar na pasta Downloads
+        )
+        
+        if not arquivo_backup:
+            return  # Usuário cancelou
+        
+        # Verificar se arquivo existe
+        if not Path(arquivo_backup).exists():
+            messagebox.showerror("Erro", "Arquivo selecionado não existe!")
+            return
+        
+        # Mostrar informações do arquivo
+        arquivo_path = Path(arquivo_backup)
+        tamanho = arquivo_path.stat().st_size
+        tamanho_mb = tamanho / (1024 * 1024)
+        
+        # Confirmar restauração
+        resposta = messagebox.askyesno(
+            "Confirmar Restauração", 
+            f"Deseja restaurar o backup?\n\n"
+            f"Arquivo: {arquivo_path.name}\n"
+            f"Tamanho: {tamanho_mb:.2f} MB\n"
+            f"Local: {arquivo_path.parent}\n\n"
+            "ATENÇÃO: Esta operação pode substituir dados existentes!"
+        )
+        
+        if resposta:
+            if self.thread_operacao and self.thread_operacao.is_alive():
+                messagebox.showwarning("Aviso", "Operação em andamento. Aguarde...")
+                return
+            
+            self.thread_operacao = threading.Thread(
+                target=self._executar_restaurar_backup_arquivo, 
+                args=(arquivo_backup,)
+            )
+            self.thread_operacao.daemon = True
+            self.thread_operacao.start()
+    
     def _restaurar_backup(self):
-        """Restaura um backup."""
+        """Restaura um backup da lista."""
         selecao = self.tree_backups.selection()
         if not selecao:
             messagebox.showwarning("Aviso", "Selecione um backup para restaurar")
@@ -482,6 +646,31 @@ class AbaBaseDados(ttk.Frame):
             )
             self.thread_operacao.daemon = True
             self.thread_operacao.start()
+    
+    def _executar_restaurar_backup_arquivo(self, arquivo_backup):
+        """Executa a restauração de arquivo específico em thread separada."""
+        try:
+            arquivo_path = Path(arquivo_backup)
+            self._mostrar_progresso(f"Restaurando backup: {arquivo_path.name}")
+            self.log_manager.log_sistema("INFO", f"Restaurando backup de arquivo: {arquivo_path}")
+            
+            # Usar o método do db_manager para restaurar arquivo específico
+            sucesso, mensagem = self.db_manager.restaurar_backup_arquivo(arquivo_backup)
+            
+            self._ocultar_progresso()
+            
+            if sucesso:
+                self.log_manager.log_sistema("SUCCESS", mensagem)
+                messagebox.showinfo("Sucesso", mensagem)
+                self._verificar_status_inicial()
+            else:
+                self.log_manager.log_sistema("ERROR", mensagem)
+                messagebox.showerror("Erro", mensagem)
+                
+        except Exception as e:
+            self._ocultar_progresso()
+            self.log_manager.log_sistema("ERROR", f"Erro inesperado: {e}")
+            messagebox.showerror("Erro", f"Erro inesperado: {e}")
     
     def _executar_restaurar_backup(self, nome_backup):
         """Executa a restauração em thread separada."""
@@ -637,26 +826,14 @@ class AbaBaseDados(ttk.Frame):
         """Adiciona tooltips aos botões da interface."""
         try:
             # Tooltips para botões de ação
-            self._criar_tooltip(self.btn_criar, 
-                               "Cria uma nova base de dados PostgreSQL para o Planka")
-            
-            self._criar_tooltip(self.btn_inicializar, 
-                               "Executa as migrações e seeders para inicializar a base de dados")
-            
-            self._criar_tooltip(self.btn_editor, 
-                               "Abre o pgAdmin (navegador) ou DBeaver (aplicação) para editar a base")
+            self._criar_tooltip(self.btn_diagnostico, 
+                               "Executa diagnóstico completo da base de dados, Docker e configuração")
             
             self._criar_tooltip(self.btn_backup, 
                                "Faz um backup completo da base de dados atual")
             
-            self._criar_tooltip(self.btn_upload, 
-                               "Faz upload de um arquivo de backup (.sql ou .zip)")
-            
             self._criar_tooltip(self.btn_restaurar, 
-                               "Restaura um backup selecionado (modo seguro)")
-            
-            self._criar_tooltip(self.btn_substituir, 
-                               "Substitui completamente a base atual por um backup")
+                               "Restaura um backup - permite escolher arquivo específico ou da lista")
             
         except Exception as e:
             self.log_manager.log_sistema("WARNING", f"Erro ao criar tooltips: {e}")

@@ -1,0 +1,13 @@
+{
+  "dependencias": {
+    "resultado": {
+      "docker": true,
+      "docker_rodando": true,
+      "nodejs": true,
+      "git": true,
+      "docker_compose": true
+    },
+    "timestamp": 1754212178.8470461,
+    "data_verificacao": "2025-08-03T10:09:38.847048"
+  }
+}

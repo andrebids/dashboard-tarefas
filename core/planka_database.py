@@ -77,8 +77,7 @@ class PlankaDatabaseManager:
             result = subprocess.run(
                 ["docker", "ps", "--filter", "name=postgres", "--format", "{{.Status}}"],
                 capture_output=True,
-                text=True,
-                timeout=10
+                text=True, encoding='utf-8', errors='replace'
             )
             status["postgres_running"] = "Up" in result.stdout
             
@@ -93,8 +92,7 @@ class PlankaDatabaseManager:
                          "-d", "postgres", "-c", f"SELECT 1 FROM pg_database WHERE datname = '{config['database']}'"],
                         cwd=self.planka_dir,
                         capture_output=True,
-                        text=True,
-                        timeout=10
+                        text=True, encoding='utf-8', errors='replace'
                     )
                     status["database_exists"] = result.returncode == 0 and "1 row" in result.stdout
                     
@@ -242,8 +240,7 @@ class PlankaDatabaseManager:
                 ["docker-compose", "exec", "-T", "postgres", "createdb", "-U", config["user"], config["database"]],
                 cwd=self.planka_dir,
                 capture_output=True,
-                text=True,
-                timeout=30
+                text=True, encoding='utf-8', errors='replace'
             )
             
             if result.returncode == 0:
@@ -272,8 +269,7 @@ class PlankaDatabaseManager:
                 ["docker-compose", "exec", "-T", "planka", "npm", "run", "db:migrate"],
                 cwd=self.planka_dir,
                 capture_output=True,
-                text=True,
-                timeout=120
+                text=True, encoding='utf-8', errors='replace'
             )
             
             if result.returncode == 0:
@@ -317,8 +313,7 @@ class PlankaDatabaseManager:
                  "-U", config["user"], "-d", config["database"], "-f", f"/tmp/{nome_backup}.sql"],
                 cwd=self.planka_dir,
                 capture_output=True,
-                text=True,
-                timeout=300
+                text=True, encoding='utf-8', errors='replace'
             )
             
             if result.returncode == 0:
@@ -432,6 +427,92 @@ class PlankaDatabaseManager:
         except Exception as e:
             return False, f"Erro ao validar backup: {str(e)}"
     
+    def restaurar_backup_arquivo(self, arquivo_backup: str, modo_teste: bool = False) -> Tuple[bool, str]:
+        """
+        Restaura um backup de um arquivo específico (caminho completo).
+        
+        Args:
+            arquivo_backup: Caminho completo do arquivo de backup
+            modo_teste: Se True, restaura em uma base de teste
+            
+        Returns:
+            (sucesso, mensagem)
+        """
+        try:
+            backup_path = Path(arquivo_backup)
+            
+            if not backup_path.exists():
+                return False, "Arquivo de backup não encontrado"
+            
+            # Verificar se é um arquivo SQL válido
+            if not backup_path.suffix.lower() in ['.sql', '.backup', '.gz']:
+                return False, "Arquivo deve ser .sql, .backup ou .gz"
+            
+            config = self.db_config.get_database_config()
+            
+            # Nome da base de dados de destino
+            db_destino = f"{config['database']}_test" if modo_teste else config["database"]
+            
+            # Se for modo teste, criar a base de teste primeiro
+            if modo_teste:
+                result_create = subprocess.run(
+                    ["docker-compose", "exec", "-T", "postgres", "createdb", 
+                     "-U", config["user"], db_destino],
+                    cwd=self.planka_dir,
+                    capture_output=True,
+                    text=True, encoding='utf-8', errors='replace'
+                )
+                
+                if result_create.returncode != 0 and "already exists" not in result_create.stderr:
+                    return False, f"Erro ao criar base de teste: {result_create.stderr}"
+            
+            # Parar o Planka se não for modo teste
+            if not modo_teste:
+                subprocess.run(["docker-compose", "down"], cwd=self.planka_dir, encoding='utf-8', errors='replace')
+            
+            # Copiar arquivo para o container
+            result_copy = subprocess.run(
+                ["docker", "cp", str(backup_path), f"planka-personalizado-postgres-1:/tmp/{backup_path.name}"],
+                capture_output=True,
+                text=True,
+                timeout=60
+            )
+            
+            if result_copy.returncode != 0:
+                return False, f"Erro ao copiar backup: {result_copy.stderr}"
+            
+            # Restaurar backup
+            if backup_path.suffix.lower() == '.gz':
+                # Arquivo comprimido - descomprimir primeiro
+                result_restore = subprocess.run(
+                    ["docker-compose", "exec", "-T", "postgres", "bash", "-c", 
+                     f"gunzip -c /tmp/{backup_path.name} | psql -U {config['user']} -d {db_destino}"],
+                    cwd=self.planka_dir,
+                    capture_output=True,
+                    text=True, encoding='utf-8', errors='replace'
+                )
+            else:
+                # Arquivo SQL normal
+                result_restore = subprocess.run(
+                    ["docker-compose", "exec", "-T", "postgres", "psql", 
+                     "-U", config["user"], "-d", db_destino, "-f", f"/tmp/{backup_path.name}"],
+                    cwd=self.planka_dir,
+                    capture_output=True,
+                    text=True, encoding='utf-8', errors='replace'
+                )
+            
+            if result_restore.returncode == 0:
+                if not modo_teste:
+                    # Reiniciar o Planka
+                    subprocess.run(["docker-compose", "up", "-d"], cwd=self.planka_dir, encoding='utf-8', errors='replace')
+                
+                return True, f"Backup restaurado com sucesso em '{db_destino}'"
+            else:
+                return False, f"Erro ao restaurar backup: {result_restore.stderr}"
+                
+        except Exception as e:
+            return False, f"Erro ao restaurar backup: {str(e)}"
+    
     def restaurar_backup(self, arquivo_backup: str, modo_teste: bool = False) -> Tuple[bool, str]:
         """
         Restaura um backup da base de dados.
@@ -461,7 +542,7 @@ class PlankaDatabaseManager:
             
             # Parar o Planka se não for modo teste
             if not modo_teste:
-                subprocess.run(["docker-compose", "down"], cwd=self.planka_dir, timeout=30)
+                subprocess.run(["docker-compose", "down"], cwd=self.planka_dir, encoding='utf-8', errors='replace')
             
             # Copiar arquivo para o container
             result_copy = subprocess.run(
@@ -480,14 +561,13 @@ class PlankaDatabaseManager:
                  "-U", config["user"], "-d", db_destino, "-f", f"/tmp/{arquivo_backup}"],
                 cwd=self.planka_dir,
                 capture_output=True,
-                text=True,
-                timeout=300
+                text=True, encoding='utf-8', errors='replace'
             )
             
             if result_restore.returncode == 0:
                 if not modo_teste:
                     # Reiniciar o Planka
-                    subprocess.run(["docker-compose", "up", "-d"], cwd=self.planka_dir, timeout=60)
+                    subprocess.run(["docker-compose", "up", "-d"], cwd=self.planka_dir, encoding='utf-8', errors='replace')
                 
                 return True, f"Backup restaurado com sucesso em '{db_destino}'"
             else:
@@ -577,31 +657,105 @@ class PlankaDatabaseManager:
     
     def conectar_editor(self, editor: str = "pgadmin") -> Tuple[bool, str]:
         """
-        Conecta a um editor de base de dados.
+        Conecta ao editor de base de dados (pgAdmin no navegador).
         
         Args:
-            editor: Tipo de editor (pgadmin, dbeaver, etc.)
+            editor: Tipo de editor (apenas pgadmin suportado)
             
         Returns:
             (sucesso, mensagem)
         """
         try:
             if editor == "pgadmin":
-                # Abrir pgAdmin no navegador
-                import webbrowser
-                webbrowser.open("http://localhost:5050")
-                return True, "pgAdmin aberto no navegador"
-            
-            elif editor == "dbeaver":
-                # Tentar abrir DBeaver
-                subprocess.Popen(["dbeaver"])
-                return True, "DBeaver iniciado"
+                return self._abrir_pgadmin()
             
             else:
                 return False, f"Editor '{editor}' não suportado"
                 
         except Exception as e:
             return False, f"Erro ao conectar editor: {str(e)}"
+    
+    def _abrir_pgadmin(self) -> Tuple[bool, str]:
+        """Abre o pgAdmin no navegador."""
+        try:
+            # Verificar se o pgAdmin está rodando
+            pgadmin_status = self._verificar_pgadmin_rodando()
+            
+            if not pgadmin_status["rodando"]:
+                # Tentar iniciar o pgAdmin
+                sucesso_inicio = self._iniciar_pgadmin()
+                if not sucesso_inicio:
+                    return False, "pgAdmin não está rodando. Use o arquivo docker-compose-pgadmin.yml para incluir o pgAdmin."
+            
+            # Aguardar um pouco para o pgAdmin inicializar
+            time.sleep(2)
+            
+            # Abrir pgAdmin no navegador
+            import webbrowser
+            webbrowser.open("http://localhost:5050")
+            return True, "pgAdmin aberto no navegador em http://localhost:5050"
+            
+        except Exception as e:
+            return False, f"Erro ao abrir pgAdmin: {str(e)}"
+    
+
+    
+    def _verificar_pgadmin_rodando(self) -> Dict[str, any]:
+        """
+        Verifica se o pgAdmin está rodando.
+        
+        Returns:
+            Dict com status do pgAdmin
+        """
+        try:
+            # Verificar se o container pgAdmin está rodando
+            result = subprocess.run(
+                ["docker", "ps", "--filter", "name=pgadmin", "--format", "{{.Status}}"],
+                capture_output=True,
+                text=True, encoding='utf-8', errors='replace'
+            )
+            
+            rodando = "Up" in result.stdout
+            
+            return {
+                "rodando": rodando,
+                "status": result.stdout.strip() if rodando else "Não encontrado"
+            }
+            
+        except Exception as e:
+            return {
+                "rodando": False,
+                "status": f"Erro ao verificar: {str(e)}"
+            }
+    
+    def _iniciar_pgadmin(self) -> bool:
+        """
+        Tenta iniciar o pgAdmin usando o docker-compose-pgadmin.yml.
+        
+        Returns:
+            True se conseguiu iniciar, False caso contrário
+        """
+        try:
+            # Verificar se o arquivo docker-compose-pgadmin.yml existe
+            compose_file = self.planka_dir / "docker-compose-pgadmin.yml"
+            
+            if not compose_file.exists():
+                return False
+            
+            # Tentar iniciar apenas o pgAdmin
+            result = subprocess.run(
+                ["docker-compose", "-f", str(compose_file), "up", "-d", "pgadmin"],
+                cwd=self.planka_dir,
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            
+            return result.returncode == 0
+            
+        except Exception as e:
+            print(f"Erro ao iniciar pgAdmin: {str(e)}")
+            return False
     
     def executar_query(self, query: str) -> Tuple[bool, str, List]:
         """
@@ -622,8 +776,7 @@ class PlankaDatabaseManager:
                  "-U", config["user"], "-d", config["database"], "-c", query],
                 cwd=self.planka_dir,
                 capture_output=True,
-                text=True,
-                timeout=60
+                text=True, encoding='utf-8', errors='replace'
             )
             
             if result.returncode == 0:

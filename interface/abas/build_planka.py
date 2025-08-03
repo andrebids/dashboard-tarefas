@@ -111,9 +111,17 @@ class AbaBuildPlanka(ttk.Frame):
                                       command=self._iniciar_producao)
         self.btn_producao.grid(row=1, column=0, sticky="ew", pady=(0, 5))
         
+        self.btn_producao_modificacoes = ttk.Button(frame_botoes_modo, text="🔧 Produção com Modificações", 
+                                                   command=self._iniciar_producao_modificacoes)
+        self.btn_producao_modificacoes.grid(row=2, column=0, sticky="ew", pady=(0, 5))
+        
+        self.btn_diagnostico_producao = ttk.Button(frame_botoes_modo, text="🔍 Diagnóstico Produção", 
+                                                  command=self._diagnostico_producao)
+        self.btn_diagnostico_producao.grid(row=3, column=0, sticky="ew", pady=(0, 5))
+        
         self.btn_parar_todos = ttk.Button(frame_botoes_modo, text="⏹️ Parar Todos", 
                                          command=self._parar_todos)
-        self.btn_parar_todos.grid(row=2, column=0, sticky="ew")
+        self.btn_parar_todos.grid(row=4, column=0, sticky="ew")
         
         # Opções de build
         frame_opcoes = ttk.LabelFrame(frame_controles, text="Opções de Build", padding=10)
@@ -182,6 +190,8 @@ class AbaBuildPlanka(ttk.Frame):
             # Tooltips para botões de modo
             self._criar_tooltip(self.btn_desenvolvimento, "Inicia o Planka em modo desenvolvimento (hot reload ativo)")
             self._criar_tooltip(self.btn_producao, "Inicia o Planka em modo produção (otimizado)")
+            self._criar_tooltip(self.btn_producao_modificacoes, "Executa produção com modificações locais (secret key, admin user, etc.)")
+            self._criar_tooltip(self.btn_diagnostico_producao, "Executa diagnóstico completo da configuração de produção")
             self._criar_tooltip(self.btn_parar_todos, "Para todos os containers Docker do Planka")
             
             # Tooltips para opções
@@ -243,7 +253,8 @@ class AbaBuildPlanka(ttk.Frame):
             # Verificar se o docker-compose está disponível
             try:
                 resultado = subprocess.run(["docker-compose", "--version"], 
-                                         capture_output=True, text=True, timeout=10)
+                                         capture_output=True, text=True, timeout=10,
+                                         encoding='utf-8', errors='replace')
                 if resultado.returncode != 0:
                     self._atualizar_status("Erro: Docker Compose não disponível", "error")
                     self._adicionar_log("❌ Docker Compose não disponível")
@@ -257,7 +268,8 @@ class AbaBuildPlanka(ttk.Frame):
             try:
                 # Verificar modo desenvolvimento primeiro (mais específico)
                 resultado_dev = subprocess.run(["docker-compose", "-f", "docker-compose-dev.yml", "ps"], 
-                                             cwd=self.caminho_planka, capture_output=True, text=True, timeout=10)
+                                             cwd=self.caminho_planka, capture_output=True, text=True, timeout=10,
+                                             encoding='utf-8', errors='replace')
                 
                 # Se modo desenvolvimento está ativo, verificar se os containers específicos estão rodando
                 if resultado_dev.returncode == 0 and "Up" in resultado_dev.stdout:
@@ -280,7 +292,8 @@ class AbaBuildPlanka(ttk.Frame):
                 
                 # Verificar modo produção
                 resultado_prod = subprocess.run(["docker-compose", "-f", "docker-compose-local.yml", "ps"], 
-                                              cwd=self.caminho_planka, capture_output=True, text=True, timeout=10)
+                                              cwd=self.caminho_planka, capture_output=True, text=True, timeout=10,
+                                              encoding='utf-8', errors='replace')
                 
                 # Se modo produção está ativo, verificar se o container planka está rodando
                 if resultado_prod.returncode == 0 and "Up" in resultado_prod.stdout:
@@ -374,7 +387,8 @@ class AbaBuildPlanka(ttk.Frame):
             
             processo = subprocess.Popen(comando, cwd=self.caminho_planka, 
                                       stdout=subprocess.PIPE, stderr=subprocess.STDOUT, 
-                                      text=True, bufsize=1, universal_newlines=True)
+                                      text=True, bufsize=1, universal_newlines=True,
+                                      encoding='utf-8', errors='replace')
             
             # Ler output em tempo real
             for linha in processo.stdout:
@@ -568,6 +582,121 @@ class AbaBuildPlanka(ttk.Frame):
             self.log_manager.log_sistema("ERROR", f"Erro ao parar containers: {e}")
             self._adicionar_log(f"❌ Erro ao parar containers: {e}")
             self._atualizar_status("Erro ao parar containers", "error")
+    
+    def _iniciar_producao_modificacoes(self):
+        """Inicia o modo de produção com modificações locais."""
+        if not messagebox.askyesno("Produção com Modificações", 
+                                  "Deseja iniciar o modo de produção com modificações locais?\n\n"
+                                  "• Gera secret key segura automaticamente\n"
+                                  "• Configura admin user automaticamente\n"
+                                  "• Aplica melhores práticas da documentação\n"
+                                  "• Acesso: http://localhost:3000"):
+            return
+        
+        try:
+            self._adicionar_log("🔧 Iniciando produção com modificações locais...")
+            self._atualizar_status("Iniciando produção com modificações...", "building")
+            
+            # Executar em thread separada
+            thread = threading.Thread(target=self._executar_producao_modificacoes, daemon=True)
+            thread.start()
+            
+        except Exception as e:
+            self.log_manager.log_sistema("ERROR", f"Erro ao iniciar produção com modificações: {e}")
+            self._adicionar_log(f"❌ Erro ao iniciar produção com modificações: {e}")
+    
+    def _executar_producao_modificacoes(self):
+        """Executa o modo de produção com modificações locais em thread separada."""
+        try:
+            # Importar o PlankaManager
+            from core.planka import PlankaManager
+            
+            # Criar instância do PlankaManager
+            planka_manager = PlankaManager(self.settings)
+            
+            # Executar produção com modificações
+            self._adicionar_log("🔧 Executando produção com modificações locais...")
+            sucesso, mensagem = planka_manager.executar_producao_com_modificacoes_locais()
+            
+            if sucesso:
+                self._adicionar_log("✅ Produção com modificações iniciada com sucesso!")
+                self._adicionar_log("🌐 Acesso: http://localhost:3000")
+                self._adicionar_log("👤 Admin user configurado automaticamente")
+                self._atualizar_status("Produção com modificações ativa", "success")
+            else:
+                self._adicionar_log(f"❌ Erro na produção com modificações: {mensagem}")
+                self._atualizar_status("Erro na produção com modificações", "error")
+            
+        except Exception as e:
+            self.log_manager.log_sistema("ERROR", f"Erro na produção com modificações: {e}")
+            self._adicionar_log(f"❌ Erro na produção com modificações: {e}")
+            self._atualizar_status("Erro na produção com modificações", "error")
+    
+    def _diagnostico_producao(self):
+        """Executa diagnóstico da configuração de produção."""
+        if not messagebox.askyesno("Diagnóstico de Produção", 
+                                  "Deseja executar diagnóstico completo da configuração de produção?\n\n"
+                                  "• Verifica containers e configurações\n"
+                                  "• Analisa logs detalhados\n"
+                                  "• Verifica admin user e secret key\n"
+                                  "• Testa conectividade"):
+            return
+        
+        try:
+            self._adicionar_log("🔍 Iniciando diagnóstico de produção...")
+            self._atualizar_status("Executando diagnóstico...", "building")
+            
+            # Executar em thread separada
+            thread = threading.Thread(target=self._executar_diagnostico_producao, daemon=True)
+            thread.start()
+            
+        except Exception as e:
+            self.log_manager.log_sistema("ERROR", f"Erro ao iniciar diagnóstico: {e}")
+            self._adicionar_log(f"❌ Erro ao iniciar diagnóstico: {e}")
+    
+    def _executar_diagnostico_producao(self):
+        """Executa diagnóstico da configuração de produção em thread separada."""
+        try:
+            # Importar o PlankaManager
+            from core.planka import PlankaManager
+            
+            # Criar instância do PlankaManager
+            planka_manager = PlankaManager(self.settings)
+            
+            # Executar diagnóstico
+            self._adicionar_log("🔍 Executando diagnóstico de produção...")
+            resultado = planka_manager.diagnosticar_producao()
+            
+            # Exibir resultados
+            self._adicionar_log("📊 Resultados do diagnóstico:")
+            self._adicionar_log(f"   • Status geral: {resultado.get('status_geral', 'N/A')}")
+            self._adicionar_log(f"   • Containers ativos: {resultado.get('containers_ativos', 0)}")
+            self._adicionar_log(f"   • Secret key válida: {resultado.get('secret_key_valida', False)}")
+            self._adicionar_log(f"   • Admin user existe: {resultado.get('admin_user_existe', False)}")
+            self._adicionar_log(f"   • Porta acessível: {resultado.get('porta_acessivel', False)}")
+            
+            # Verificar problemas
+            problemas = resultado.get('problemas', [])
+            if problemas:
+                self._adicionar_log("⚠️ Problemas encontrados:")
+                for problema in problemas:
+                    self._adicionar_log(f"   • {problema}")
+            else:
+                self._adicionar_log("✅ Nenhum problema encontrado!")
+            
+            # Logs detalhados se houver
+            logs_detalhados = resultado.get('logs_detalhados', {})
+            if logs_detalhados:
+                self._adicionar_log("📋 Logs detalhados:")
+                for container, log in logs_detalhados.items():
+                    self._adicionar_log(f"   • {container}: {log[:100]}...")
+            
+            self._atualizar_status("Diagnóstico concluído", "success")
+            
+        except Exception as e:
+            self.log_manager.log_sistema("ERROR", f"Erro no diagnóstico: {e}")
+            self._adicionar_log(f"❌ Erro no diagnóstico: {e}")
+            self._atualizar_status("Erro no diagnóstico", "error")
     
     def _atualizar_interface_build(self, em_andamento: bool):
         """Atualiza a interface durante o build."""

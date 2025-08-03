@@ -177,11 +177,11 @@ class Dashboard(ttk.Frame):
                 # Processar notificações pendentes
                 self._processar_notificacoes()
                 
-                # Aguardar 2 segundos
-                time.sleep(2)
+                # Aguardar 5 segundos (reduzido de 2 para melhorar performance)
+                time.sleep(5)
             except Exception as e:
                 self.log_manager.log_sistema("ERROR", f"Erro no loop de atualizações: {e}")
-                time.sleep(5)
+                time.sleep(10)  # Aumentado de 5 para 10 segundos em caso de erro
     
     def registrar_evento(self, evento: str, callback):
         """Registra um callback para um evento."""
@@ -348,32 +348,55 @@ class Dashboard(ttk.Frame):
         menu_ajuda.add_command(label="Documentação", command=self._documentacao)
     
     def _inicializar_abas(self):
-        """Inicializa todas as abas do dashboard."""
+        """Inicializa todas as abas do dashboard de forma otimizada."""
         try:
-            # Aba Principal (Planka)
+            # Inicializar apenas a aba principal primeiro (mais importante)
             self.abas["principal"] = AbaPrincipal(self.notebook, self.log_manager, self.settings)
             self.notebook.add(self.abas["principal"], text="🏠 Principal")
-            
-            # Aba Base de Dados
-            self.abas["base_dados"] = AbaBaseDados(self.notebook, self.log_manager, self.settings)
-            self.notebook.add(self.abas["base_dados"], text="🗄️ Base de Dados")
-            
-            # Aba Servidores
-            self.abas["servidores"] = AbaServidores(self.notebook, self.log_manager, self.settings)
-            self.notebook.add(self.abas["servidores"], text="🖥️ Servidores")
-            
-            # Aba Build Planka
-            self.abas["build_planka"] = AbaBuildPlanka(self.notebook, self.log_manager, self.settings)
-            self.notebook.add(self.abas["build_planka"], text="🔨 Build Planka")
             
             # Definir aba atual
             self.aba_atual = "principal"
             
-            self.log_manager.log_sistema("SUCCESS", "Todas as abas inicializadas")
+            # Inicializar outras abas em background para não bloquear a UI
+            self._inicializar_abas_background()
+            
+            self.log_manager.log_sistema("SUCCESS", "Aba principal inicializada, outras abas em background")
             
         except Exception as e:
             self.log_manager.log_sistema("ERROR", f"Erro ao inicializar abas: {e}")
             messagebox.showerror("Erro", f"Erro ao inicializar abas: {e}")
+    
+    def _inicializar_abas_background(self):
+        """Inicializa as outras abas em background."""
+        def init_background():
+            try:
+                # Aguardar um pouco para não interferir na inicialização da UI
+                time.sleep(0.5)
+                
+                # Aba Base de Dados
+                self.abas["base_dados"] = AbaBaseDados(self.notebook, self.log_manager, self.settings)
+                self.notebook.add(self.abas["base_dados"], text="🗄️ Base de Dados")
+                
+                time.sleep(0.2)  # Pequena pausa entre abas
+                
+                # Aba Servidores
+                self.abas["servidores"] = AbaServidores(self.notebook, self.log_manager, self.settings)
+                self.notebook.add(self.abas["servidores"], text="🖥️ Servidores")
+                
+                time.sleep(0.2)  # Pequena pausa entre abas
+                
+                # Aba Build Planka
+                self.abas["build_planka"] = AbaBuildPlanka(self.notebook, self.log_manager, self.settings)
+                self.notebook.add(self.abas["build_planka"], text="🔨 Build Planka")
+                
+                self.log_manager.log_sistema("SUCCESS", "Todas as abas inicializadas em background")
+                
+            except Exception as e:
+                self.log_manager.log_sistema("ERROR", f"Erro ao inicializar abas em background: {e}")
+        
+        # Executar em thread separada
+        thread = threading.Thread(target=init_background, daemon=True)
+        thread.start()
     
     def _on_aba_mudou(self, event):
         """Chamado quando a aba ativa muda."""

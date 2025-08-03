@@ -151,8 +151,7 @@ class RepositoryManager:
                 ["git", "status"],
                 cwd=dir_planka,
                 capture_output=True,
-                text=True,
-                timeout=30
+                text=True, encoding='utf-8', errors='replace'
             )
             
             if resultado.returncode != 0:
@@ -167,8 +166,7 @@ class RepositoryManager:
                 ["git", "branch", "--show-current"],
                 cwd=dir_planka,
                 capture_output=True,
-                text=True,
-                timeout=30
+                text=True, encoding='utf-8', errors='replace'
             )
             
             branch_atual = resultado_branch.stdout.strip() if resultado_branch.returncode == 0 else "desconhecida"
@@ -178,8 +176,7 @@ class RepositoryManager:
                 ["git", "status", "--porcelain"],
                 cwd=dir_planka,
                 capture_output=True,
-                text=True,
-                timeout=30
+                text=True, encoding='utf-8', errors='replace'
             )
             
             tem_mudancas = bool(resultado_status.stdout.strip())
@@ -240,8 +237,7 @@ class RepositoryManager:
                 ["git", "log", "-1", "--format=%H|%an|%ad|%s"],
                 cwd=dir_planka,
                 capture_output=True,
-                text=True,
-                timeout=30
+                text=True, encoding='utf-8', errors='replace'
             )
             
             ultimo_commit = {}
@@ -260,8 +256,7 @@ class RepositoryManager:
                 ["git", "rev-list", "--count", "HEAD"],
                 cwd=dir_planka,
                 capture_output=True,
-                text=True,
-                timeout=30
+                text=True, encoding='utf-8', errors='replace'
             )
             
             total_commits = resultado_count.stdout.strip() if resultado_count.returncode == 0 else "0"
@@ -298,8 +293,7 @@ class RepositoryManager:
             resultado = subprocess.run(
                 [comando, "--version"],
                 capture_output=True,
-                text=True,
-                timeout=10
+                text=True, encoding='utf-8', errors='replace'
             )
             return resultado.returncode == 0
         except (subprocess.TimeoutExpired, FileNotFoundError):
