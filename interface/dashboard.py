@@ -37,7 +37,11 @@ class Dashboard(ttk.Frame):
         self.settings = settings
         
         # Criar diretórios necessários
-        self.settings.criar_diretorios_necessarios()
+        if self.settings:
+            try:
+                self.settings.criar_diretorios_necessarios()
+            except Exception as e:
+                print(f"Aviso: Erro ao criar diretórios necessários: {e}")
         
         # Abas do dashboard
         self.abas = {}
@@ -55,7 +59,11 @@ class Dashboard(ttk.Frame):
         self._inicializar_abas()
         
         # Registrar log de inicialização
-        self.log_manager.log_sistema("SUCCESS", "Interface do dashboard inicializada")
+        if self.log_manager:
+            try:
+                self.log_manager.log_sistema("SUCCESS", "Interface do dashboard inicializada")
+            except Exception as e:
+                print(f"Aviso: Erro ao registrar log: {e}")
     
     def _criar_interface(self):
         """Cria a interface principal do dashboard."""
@@ -157,13 +165,16 @@ class Dashboard(ttk.Frame):
             # Definir aba atual
             self.aba_atual = "principal"
             
-            # Inicializar outras abas em background
+            # Inicializar outras abas imediatamente (sem thread para debug)
             self._inicializar_abas_background()
             
-            self.log_manager.log_sistema("SUCCESS", "Aba principal inicializada")
+            if self.log_manager:
+                self.log_manager.log_sistema("SUCCESS", "Aba principal inicializada")
             
         except Exception as e:
-            self.log_manager.log_sistema("ERROR", f"Erro ao inicializar abas: {e}")
+            print(f"❌ Erro ao inicializar abas: {e}")
+            if self.log_manager:
+                self.log_manager.log_sistema("ERROR", f"Erro ao inicializar abas: {e}")
             messagebox.showerror("Erro", f"Erro ao inicializar abas: {e}")
     
     def _inicializar_abas_background(self):
@@ -174,29 +185,53 @@ class Dashboard(ttk.Frame):
                 time.sleep(0.5)
                 
                 # Aba Base de Dados
-                self.abas["base_dados"] = AbaBaseDados(self.notebook, self.log_manager, self.settings)
-                self.notebook.add(self.abas["base_dados"], text="🗄️ Base de Dados")
+                try:
+                    print("Inicializando aba Base de Dados...")
+                    self.abas["base_dados"] = AbaBaseDados(self.notebook, self.log_manager, self.settings)
+                    self.notebook.add(self.abas["base_dados"], text="🗄️ Base de Dados")
+                    print("✅ Aba Base de Dados inicializada")
+                except Exception as e:
+                    print(f"❌ Erro ao inicializar aba Base de Dados: {e}")
+                    if self.log_manager:
+                        self.log_manager.log_sistema("ERROR", f"Erro ao inicializar aba Base de Dados: {e}")
                 
                 time.sleep(0.2)
                 
                 # Aba Servidores
-                self.abas["servidores"] = AbaServidores(self.notebook, self.log_manager, self.settings)
-                self.notebook.add(self.abas["servidores"], text="🖥️ Servidores")
+                try:
+                    print("Inicializando aba Servidores...")
+                    self.abas["servidores"] = AbaServidores(self.notebook, self.log_manager, self.settings)
+                    self.notebook.add(self.abas["servidores"], text="🖥️ Servidores")
+                    print("✅ Aba Servidores inicializada")
+                except Exception as e:
+                    print(f"❌ Erro ao inicializar aba Servidores: {e}")
+                    if self.log_manager:
+                        self.log_manager.log_sistema("ERROR", f"Erro ao inicializar aba Servidores: {e}")
                 
                 time.sleep(0.2)
                 
                 # Aba Build Planka
-                self.abas["build_planka"] = AbaBuildPlanka(self.notebook, self.log_manager, self.settings)
-                self.notebook.add(self.abas["build_planka"], text="🔨 Build Planka")
+                try:
+                    print("Inicializando aba Build Planka...")
+                    self.abas["build_planka"] = AbaBuildPlanka(self.notebook, self.log_manager, self.settings)
+                    self.notebook.add(self.abas["build_planka"], text="🔨 Build Planka")
+                    print("✅ Aba Build Planka inicializada")
+                except Exception as e:
+                    print(f"❌ Erro ao inicializar aba Build Planka: {e}")
+                    if self.log_manager:
+                        self.log_manager.log_sistema("ERROR", f"Erro ao inicializar aba Build Planka: {e}")
                 
-                self.log_manager.log_sistema("SUCCESS", "Todas as abas inicializadas")
+                if self.log_manager:
+                    self.log_manager.log_sistema("SUCCESS", "Todas as abas inicializadas")
+                print("🎉 Todas as abas foram inicializadas com sucesso!")
                 
             except Exception as e:
-                self.log_manager.log_sistema("ERROR", f"Erro ao inicializar abas em background: {e}")
+                print(f"❌ Erro geral ao inicializar abas em background: {e}")
+                if self.log_manager:
+                    self.log_manager.log_sistema("ERROR", f"Erro ao inicializar abas em background: {e}")
         
-        # Executar em thread separada
-        thread = threading.Thread(target=init_background, daemon=True)
-        thread.start()
+        # Executar imediatamente (sem thread para debug)
+        init_background()
     
     def _on_aba_mudou(self, event):
         """Chamado quando a aba ativa muda."""
@@ -208,10 +243,12 @@ class Dashboard(ttk.Frame):
             nomes_abas = ["principal", "base_dados", "servidores", "build_planka"]
             if 0 <= indice_ativo < len(nomes_abas):
                 self.aba_atual = nomes_abas[indice_ativo]
-                self.log_manager.log_sistema("INFO", f"Aba ativa: {self.aba_atual}")
+                if self.log_manager:
+                    self.log_manager.log_sistema("INFO", f"Aba ativa: {self.aba_atual}")
                 
         except Exception as e:
-            self.log_manager.log_sistema("ERROR", f"Erro ao mudar aba: {e}")
+            if self.log_manager:
+                self.log_manager.log_sistema("ERROR", f"Erro ao mudar aba: {e}")
     
     def atualizar_status(self, tipo: str, valor: str):
         """Atualiza o status na barra de status."""
@@ -225,11 +262,16 @@ class Dashboard(ttk.Frame):
             elif tipo == "sistema":
                 self.lbl_status.config(text=f"Sistema: {valor}")
         except Exception as e:
-            self.log_manager.log_sistema("ERROR", f"Erro ao atualizar status {tipo}: {e}")
+            if self.log_manager:
+                self.log_manager.log_sistema("ERROR", f"Erro ao atualizar status {tipo}: {e}")
     
     def _limpar_logs_antigos(self):
         """Limpa logs antigos do sistema."""
         try:
+            if not self.log_manager:
+                messagebox.showwarning("Aviso", "Sistema de logs não disponível")
+                return
+                
             # Limpar logs com mais de 30 dias
             dias_limite = 30
             arquivos_removidos = self.log_manager.limpar_logs_antigos(dias_limite)
@@ -240,13 +282,15 @@ class Dashboard(ttk.Frame):
                 messagebox.showinfo("Info", "Nenhum arquivo de log antigo encontrado")
                 
         except Exception as e:
-            self.log_manager.log_sistema("ERROR", f"Erro ao limpar logs antigos: {e}")
+            if self.log_manager:
+                self.log_manager.log_sistema("ERROR", f"Erro ao limpar logs antigos: {e}")
             messagebox.showerror("Erro", f"Erro ao limpar logs antigos: {e}")
     
     def _sair(self):
         """Sai da aplicação."""
         if messagebox.askokcancel("Sair", "Deseja realmente sair?"):
-            self.log_manager.log_sistema("INFO", "Aplicação encerrada pelo usuário")
+            if self.log_manager:
+                self.log_manager.log_sistema("INFO", "Aplicação encerrada pelo usuário")
             self.parent.quit()
     
     def _sobre(self):
@@ -265,10 +309,17 @@ class Dashboard(ttk.Frame):
     def salvar_configuracoes(self):
         """Salva as configurações do sistema."""
         try:
-            self.settings.salvar()
-            self.log_manager.log_sistema("SUCCESS", "Configurações salvas")
+            if self.settings:
+                self.settings.salvar()
+                if self.log_manager:
+                    self.log_manager.log_sistema("SUCCESS", "Configurações salvas")
         except Exception as e:
-            self.log_manager.log_sistema("ERROR", f"Erro ao salvar configurações: {e}")
+            print(f"Erro ao salvar configurações: {e}")
+            if self.log_manager:
+                try:
+                    self.log_manager.log_sistema("ERROR", f"Erro ao salvar configurações: {e}")
+                except:
+                    pass
     
     def obter_aba_atual(self) -> str:
         """Retorna o nome da aba atualmente ativa."""

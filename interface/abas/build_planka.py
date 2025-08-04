@@ -239,6 +239,20 @@ class AbaBuildPlanka(ttk.Frame):
         except Exception as e:
             self.log_manager.log_sistema("ERROR", f"Erro ao configurar eventos: {e}")
     
+    def _verificar_docker_rodando(self) -> bool:
+        """Verifica se o Docker está rodando."""
+        try:
+            resultado = subprocess.run(
+                ["docker", "info"], 
+                capture_output=True, 
+                text=True, 
+                timeout=5,
+                encoding='utf-8', errors='replace'
+            )
+            return resultado.returncode == 0
+        except Exception:
+            return False
+    
     def _verificar_status(self):
         """Verifica o status atual do Planka."""
         try:
@@ -248,6 +262,16 @@ class AbaBuildPlanka(ttk.Frame):
             if not os.path.exists(self.caminho_planka):
                 self._atualizar_status("Erro: Diretório do Planka não encontrado", "error")
                 self._adicionar_log("❌ Diretório do Planka não encontrado")
+                return
+            
+            # Verificar se o Docker está rodando
+            if not self._verificar_docker_rodando():
+                self._atualizar_status("Docker não está rodando", "error")
+                self._adicionar_log("❌ Docker não está rodando")
+                self._adicionar_log("💡 Para resolver:")
+                self._adicionar_log("   1. Abra o Docker Desktop")
+                self._adicionar_log("   2. Aguarde o Docker inicializar")
+                self._adicionar_log("   3. Tente novamente")
                 return
             
             # Verificar se o docker-compose está disponível
@@ -383,6 +407,16 @@ class AbaBuildPlanka(ttk.Frame):
     def _executar_comando(self, comando, descricao):
         """Executa um comando e mostra o output."""
         try:
+            # Verificar se é um comando Docker e se o Docker está rodando
+            if comando[0] in ["docker", "docker-compose"]:
+                if not self._verificar_docker_rodando():
+                    self._adicionar_log(f"❌ {descricao} falhou: Docker não está rodando")
+                    self._adicionar_log("💡 Para resolver:")
+                    self._adicionar_log("   1. Abra o Docker Desktop")
+                    self._adicionar_log("   2. Aguarde o Docker inicializar")
+                    self._adicionar_log("   3. Tente novamente")
+                    raise Exception("Docker não está rodando")
+            
             self._adicionar_log(f"📋 {descricao}: {' '.join(comando)}")
             
             processo = subprocess.Popen(comando, cwd=self.caminho_planka, 
@@ -400,6 +434,17 @@ class AbaBuildPlanka(ttk.Frame):
                 self._adicionar_log(f"✅ {descricao} concluído")
             else:
                 self._adicionar_log(f"❌ {descricao} falhou (código: {processo.returncode})")
+                
+                # Verificar se é erro específico do Docker
+                if "docker client must be run with elevated privileges" in str(processo.stderr) if processo.stderr else "":
+                    self._adicionar_log("💡 Erro de permissões do Docker:")
+                    self._adicionar_log("   - Execute o Docker Desktop como administrador")
+                    self._adicionar_log("   - Ou reinicie o Docker Desktop")
+                elif "The system cannot find the file specified" in str(processo.stderr) if processo.stderr else "":
+                    self._adicionar_log("💡 Docker não está rodando ou não está acessível")
+                    self._adicionar_log("   - Verifique se o Docker Desktop está aberto")
+                    self._adicionar_log("   - Aguarde o Docker inicializar completamente")
+                
                 raise Exception(f"Comando falhou com código {processo.returncode}")
                 
         except Exception as e:
@@ -472,10 +517,24 @@ class AbaBuildPlanka(ttk.Frame):
     def _executar_desenvolvimento(self):
         """Executa o modo de desenvolvimento em thread separada."""
         try:
+            # Verificar se o Docker está rodando antes de começar
+            if not self._verificar_docker_rodando():
+                self._adicionar_log("❌ Docker não está rodando")
+                self._adicionar_log("💡 Para resolver:")
+                self._adicionar_log("   1. Abra o Docker Desktop")
+                self._adicionar_log("   2. Aguarde o Docker inicializar")
+                self._adicionar_log("   3. Tente novamente")
+                self._atualizar_status("Docker não está rodando", "error")
+                return
+            
             # Parar containers de produção se estiverem rodando
             self._adicionar_log("⏹️ Parando containers de produção...")
-            self._executar_comando(["docker-compose", "-f", "docker-compose-local.yml", "down"], 
-                                 "Parando produção")
+            try:
+                self._executar_comando(["docker-compose", "-f", "docker-compose-local.yml", "down"], 
+                                     "Parando produção")
+            except Exception as e:
+                # Se falhar ao parar, continuar mesmo assim
+                self._adicionar_log(f"⚠️ Aviso: Não foi possível parar produção: {e}")
             
             # Iniciar modo desenvolvimento
             self._adicionar_log("🚀 Iniciando containers de desenvolvimento...")
@@ -565,15 +624,31 @@ class AbaBuildPlanka(ttk.Frame):
     def _executar_parar_todos(self):
         """Executa a parada de todos os containers em thread separada."""
         try:
+            # Verificar se o Docker está rodando antes de começar
+            if not self._verificar_docker_rodando():
+                self._adicionar_log("❌ Docker não está rodando")
+                self._adicionar_log("💡 Para resolver:")
+                self._adicionar_log("   1. Abra o Docker Desktop")
+                self._adicionar_log("   2. Aguarde o Docker inicializar")
+                self._adicionar_log("   3. Tente novamente")
+                self._atualizar_status("Docker não está rodando", "error")
+                return
+            
             # Parar containers de produção
             self._adicionar_log("⏹️ Parando containers de produção...")
-            self._executar_comando(["docker-compose", "-f", "docker-compose-local.yml", "down"], 
-                                 "Parando produção")
+            try:
+                self._executar_comando(["docker-compose", "-f", "docker-compose-local.yml", "down"], 
+                                     "Parando produção")
+            except Exception as e:
+                self._adicionar_log(f"⚠️ Aviso: Não foi possível parar produção: {e}")
             
             # Parar containers de desenvolvimento
             self._adicionar_log("⏹️ Parando containers de desenvolvimento...")
-            self._executar_comando(["docker-compose", "-f", "docker-compose-dev.yml", "down"], 
-                                 "Parando desenvolvimento")
+            try:
+                self._executar_comando(["docker-compose", "-f", "docker-compose-dev.yml", "down"], 
+                                     "Parando desenvolvimento")
+            except Exception as e:
+                self._adicionar_log(f"⚠️ Aviso: Não foi possível parar desenvolvimento: {e}")
             
             self._adicionar_log("✅ Todos os containers parados!")
             self._atualizar_status("Todos os containers parados", "warning")

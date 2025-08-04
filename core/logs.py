@@ -45,7 +45,18 @@ class LogManager:
             diretorio: Diretório onde salvar os logs
         """
         # Criar diretório se não existir
-        diretorio.mkdir(parents=True, exist_ok=True)
+        try:
+            diretorio.mkdir(parents=True, exist_ok=True)
+        except PermissionError:
+            # Se não conseguir criar o diretório, usar um diretório temporário
+            import tempfile
+            temp_dir = Path(tempfile.gettempdir()) / "dashboard_logs" / nome
+            temp_dir.mkdir(parents=True, exist_ok=True)
+            diretorio = temp_dir
+            print(f"Usando diretório temporário para logs {nome}: {diretorio}")
+        except Exception as e:
+            print(f"Erro ao criar diretório de logs {nome}: {e}")
+            return
         
         # Criar logger
         logger = logging.getLogger(f"dashboard.{nome}")
@@ -62,10 +73,18 @@ class LogManager:
         )
         
         # Handler para arquivo
-        arquivo_log = diretorio / f"{nome}_{datetime.date.today()}.log"
-        file_handler = logging.FileHandler(arquivo_log, encoding='utf-8')
-        file_handler.setLevel(logging.INFO)
-        file_handler.setFormatter(formato)
+        try:
+            arquivo_log = diretorio / f"{nome}_{datetime.date.today()}.log"
+            file_handler = logging.FileHandler(arquivo_log, encoding='utf-8')
+            file_handler.setLevel(logging.INFO)
+            file_handler.setFormatter(formato)
+        except PermissionError:
+            # Se não conseguir criar o arquivo de log, usar apenas console
+            print(f"Aviso: Não foi possível criar arquivo de log para {nome}. Usando apenas console.")
+            file_handler = None
+        except Exception as e:
+            print(f"Erro ao configurar arquivo de log para {nome}: {e}")
+            file_handler = None
         
         # Handler para console
         console_handler = logging.StreamHandler()
@@ -73,7 +92,8 @@ class LogManager:
         console_handler.setFormatter(formato)
         
         # Adicionar handlers
-        logger.addHandler(file_handler)
+        if file_handler:
+            logger.addHandler(file_handler)
         logger.addHandler(console_handler)
         
         self.loggers[nome] = logger

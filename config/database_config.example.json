@@ -3,7 +3,11 @@
   "port": 5432,
   "database": "planka",
   "user": "postgres",
-  "password": "SUA_SENHA_AQUI",
-  "use_environment": false,
-  "encrypted": true
+  "password": "",
+  "use_environment": true,
+  "encrypted": true,
+  "environment_variables": {
+    "POSTGRES_PASSWORD": "PLANKA_DB_PASSWORD",
+    "POSTGRES_USER": "PLANKA_DB_USER"
+  }
 } 

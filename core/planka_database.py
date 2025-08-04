@@ -35,8 +35,17 @@ class PlankaDatabaseManager:
         """
         self.settings = settings
         self.planka_dir = Path(settings.obter("planka", "diretorio"))
-        self.backup_dir = self.planka_dir / "backups"
-        self.backup_dir.mkdir(exist_ok=True)
+        
+        # Criar diretório de backups de forma segura
+        try:
+            self.backup_dir = self.planka_dir / "backups"
+            self.backup_dir.mkdir(exist_ok=True)
+        except Exception as e:
+            # Se não conseguir criar no diretório do Planka, usar diretório local
+            print(f"Aviso: Não foi possível criar diretório de backups em {self.planka_dir}: {e}")
+            self.backup_dir = Path(__file__).parent.parent / "backups"
+            self.backup_dir.mkdir(exist_ok=True)
+            print(f"Usando diretório de backups local: {self.backup_dir}")
         
         # Configuração segura da base de dados
         try:
@@ -73,46 +82,69 @@ class PlankaDatabaseManager:
             if not status["config_valid"]:
                 return status
             
-            # Verificar se o container PostgreSQL está rodando
-            result = subprocess.run(
-                ["docker", "ps", "--filter", "name=postgres", "--format", "{{.Status}}"],
-                capture_output=True,
-                text=True, encoding='utf-8', errors='replace'
-            )
-            status["postgres_running"] = "Up" in result.stdout
+            # Verificar se o Docker está disponível
+            try:
+                result = subprocess.run(
+                    ["docker", "--version"],
+                    capture_output=True,
+                    text=True, encoding='utf-8', errors='replace'
+                )
+                docker_available = result.returncode == 0
+            except FileNotFoundError:
+                docker_available = False
+                print("Docker não encontrado - modo desenvolvimento ativo")
             
-            if status["postgres_running"]:
-                # Tentar conectar na base de dados via docker exec
+            if docker_available:
+                # Verificar se o container PostgreSQL está rodando
                 try:
-                    config = self.db_config.get_database_config()
-                    
-                    # Verificar se a base existe
                     result = subprocess.run(
-                        ["docker-compose", "exec", "-T", "postgres", "psql", "-U", config["user"], 
-                         "-d", "postgres", "-c", f"SELECT 1 FROM pg_database WHERE datname = '{config['database']}'"],
-                        cwd=self.planka_dir,
+                        ["docker", "ps", "--filter", "name=postgres", "--format", "{{.Status}}"],
                         capture_output=True,
                         text=True, encoding='utf-8', errors='replace'
                     )
-                    status["database_exists"] = result.returncode == 0 and "1 row" in result.stdout
+                    status["postgres_running"] = "Up" in result.stdout
                     
-                    if status["database_exists"]:
-                        # Verificar se as tabelas existem
-                        result = subprocess.run(
-                            ["docker-compose", "exec", "-T", "postgres", "psql", "-U", config["user"], 
-                             "-d", config["database"], "-c", "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'user_account'"],
-                            cwd=self.planka_dir,
-                            capture_output=True,
-                            text=True,
-                            timeout=10
-                        )
-                        status["tables_exist"] = result.returncode == 0 and "1" in result.stdout
-                        status["connection_ok"] = True
-                        
-                except subprocess.TimeoutExpired:
-                    print("Timeout ao verificar conectividade")
+                    if status["postgres_running"]:
+                        # Tentar conectar na base de dados via docker exec
+                        try:
+                            config = self.db_config.get_database_config()
+                            
+                            # Verificar se a base existe
+                            result = subprocess.run(
+                                ["docker-compose", "exec", "-T", "postgres", "psql", "-U", config["user"], 
+                                 "-d", "postgres", "-c", f"SELECT 1 FROM pg_database WHERE datname = '{config['database']}'"],
+                                cwd=self.planka_dir,
+                                capture_output=True,
+                                text=True, encoding='utf-8', errors='replace'
+                            )
+                            status["database_exists"] = result.returncode == 0 and "1 row" in result.stdout
+                            
+                            if status["database_exists"]:
+                                # Verificar se as tabelas existem
+                                result = subprocess.run(
+                                    ["docker-compose", "exec", "-T", "postgres", "psql", "-U", config["user"], 
+                                     "-d", config["database"], "-c", "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'user_account'"],
+                                    cwd=self.planka_dir,
+                                    capture_output=True,
+                                    text=True,
+                                    timeout=10
+                                )
+                                status["tables_exist"] = result.returncode == 0 and "1" in result.stdout
+                                status["connection_ok"] = True
+                                
+                        except subprocess.TimeoutExpired:
+                            print("Timeout ao verificar conectividade")
+                        except Exception as e:
+                            print(f"Erro ao verificar conectividade: {e}")
                 except Exception as e:
-                    print(f"Erro ao verificar conectividade: {e}")
+                    print(f"Erro ao verificar containers Docker: {e}")
+            else:
+                # Modo desenvolvimento - sem Docker
+                status["postgres_running"] = False
+                status["database_exists"] = False
+                status["connection_ok"] = False
+                status["tables_exist"] = False
+                print("Modo desenvolvimento: Docker não disponível")
                     
         except Exception as e:
             print(f"Erro ao verificar conectividade: {e}")

@@ -31,12 +31,26 @@ def main():
     Função principal que inicia a aplicação.
     """
     try:
+        print("Iniciando Dashboard...")
+        
         # Inicializar configurações
-        settings = Settings()
+        try:
+            settings = Settings()
+            print("Configurações carregadas com sucesso")
+        except Exception as e:
+            print(f"Erro ao carregar configurações: {e}")
+            # Tentar criar configurações básicas
+            settings = None
         
         # Inicializar sistema de logs
-        log_manager = LogManager(settings)
-        log_manager.registrar_log("INFO", "Iniciando Dashboard de Tarefas Python")
+        try:
+            log_manager = LogManager(settings)
+            if settings:
+                log_manager.registrar_log("INFO", "Iniciando Dashboard de Tarefas Python")
+            print("Sistema de logs inicializado")
+        except Exception as e:
+            print(f"Erro ao inicializar logs: {e}")
+            log_manager = None
         
         # Criar janela principal
         root = tk.Tk()
@@ -59,23 +73,43 @@ def main():
             pass  # Ignorar se não houver ícone
         
         # Criar dashboard
-        dashboard = Dashboard(root, log_manager, settings)
+        try:
+            dashboard = Dashboard(root, log_manager, settings)
+            print("Dashboard criado com sucesso")
+        except Exception as e:
+            print(f"Erro ao criar dashboard: {e}")
+            # Mostrar mensagem de erro na interface
+            error_label = tk.Label(root, text=f"Erro ao inicializar dashboard:\n{e}", 
+                                 fg="red", font=("Arial", 12))
+            error_label.pack(expand=True, fill="both", padx=20, pady=20)
+            
+            # Botão para sair
+            exit_button = tk.Button(root, text="Sair", command=root.destroy)
+            exit_button.pack(pady=10)
+            
+            root.mainloop()
+            return
         
         # Configurar protocolo de fechamento
         def on_closing():
             """Função chamada quando a janela é fechada."""
             try:
-                log_manager.registrar_log("INFO", "Fechando Dashboard de Tarefas")
-                dashboard.salvar_configuracoes()
+                if log_manager:
+                    log_manager.registrar_log("INFO", "Fechando Dashboard de Tarefas")
+                if hasattr(dashboard, 'salvar_configuracoes'):
+                    dashboard.salvar_configuracoes()
                 root.destroy()
             except Exception as e:
-                log_manager.registrar_log("ERROR", f"Erro ao fechar aplicação: {e}")
+                if log_manager:
+                    log_manager.registrar_log("ERROR", f"Erro ao fechar aplicação: {e}")
                 root.destroy()
         
         root.protocol("WM_DELETE_WINDOW", on_closing)
         
         # Iniciar loop principal
-        log_manager.registrar_log("SUCCESS", "Dashboard iniciado com sucesso")
+        if log_manager:
+            log_manager.registrar_log("SUCCESS", "Dashboard iniciado com sucesso")
+        print("Dashboard iniciado com sucesso!")
         root.mainloop()
         
     except Exception as e:

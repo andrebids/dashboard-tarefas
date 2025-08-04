@@ -53,7 +53,7 @@ echo.
 echo Iniciando Dashboard...
 echo.
 
-py main.py
+py iniciar_dashboard.py
 
 echo.
 echo Dashboard finalizado.
