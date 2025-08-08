@@ -29,13 +29,15 @@ class DatabaseConfig:
         
         # Configurações padrão (sem credenciais sensíveis)
         self.default_config = {
-            "host": "localhost",
+            "host": "localhost",  # Para conexão via Docker exec
             "port": 5432,
             "database": "planka",
             "user": "postgres",
             "password": "",  # Será definido via variável de ambiente ou arquivo seguro
             "use_environment": True,  # Usar variáveis de ambiente por padrão
-            "encrypted": False
+            "encrypted": False,
+            "use_docker": True,  # Usar Docker para conectar
+            "docker_container": "planka-personalizado-postgres-1"
         }
         
         # Inicializar configuração

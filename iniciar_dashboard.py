@@ -67,8 +67,8 @@ def configurar_caminhos(dev_path):
         },
         "planka": {
             "diretorio": str(planka_path),
-            "porta": 3000,
-            "url": "http://localhost:3000",
+            "porta": 3001,
+            "url": "http://localhost:3001",
             "docker_compose_file": "docker-compose.yml"
         },
         "database": {

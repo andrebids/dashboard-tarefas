@@ -40,12 +40,12 @@ class Settings:
                 "tema": "default",
                 "console_altura": 200
             },
-            "planka": {
-                "diretorio": "~/Desktop/DEV/planka-personalizado",
-                "porta": 3000,
-                "url": "http://localhost:3000",
-                "docker_compose_file": "docker-compose.yml"
-            },
+                    "planka": {
+            "diretorio": "~/Desktop/DEV/planka-personalizado",
+            "porta": 3001,
+            "url": "http://localhost:3001",
+            "docker_compose_file": "docker-compose.yml"
+        },
             "database": {
                 "arquivo": "~/Desktop/DEV/dashboard-tarefas/database/dashboard.db",
                 "backup_automatico": True,

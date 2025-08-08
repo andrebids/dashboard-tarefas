@@ -203,9 +203,26 @@ class DatabaseDiagnostic:
         try:
             config = self.db_config.get_database_config()
             
-            # Verificar se PostgreSQL está acessível
+            # Determinar qual arquivo docker-compose usar
+            docker_compose_files = [
+                "docker-compose-dev.yml",
+                "docker-compose-local.yml", 
+                "docker-compose.yml"
+            ]
+            
+            docker_compose_file = None
+            for file in docker_compose_files:
+                if (self.planka_dir / file).exists():
+                    docker_compose_file = file
+                    break
+            
+            if not docker_compose_file:
+                resultado["erro"] = "Nenhum arquivo docker-compose encontrado"
+                return resultado
+            
+            # Verificar se PostgreSQL está acessível via Docker
             result = subprocess.run(
-                ["docker-compose", "exec", "-T", "postgres", "pg_isready", "-U", config["user"]],
+                ["docker-compose", "-f", docker_compose_file, "exec", "-T", "postgres", "pg_isready", "-U", config["user"]],
                 cwd=self.planka_dir,
                 capture_output=True,
                 text=True, encoding='utf-8', errors='replace'
@@ -216,7 +233,7 @@ class DatabaseDiagnostic:
             if resultado["postgres_acessivel"]:
                 # Verificar se base existe
                 result = subprocess.run(
-                    ["docker-compose", "exec", "-T", "postgres", "psql", "-U", config["user"], 
+                    ["docker-compose", "-f", docker_compose_file, "exec", "-T", "postgres", "psql", "-U", config["user"], 
                      "-d", "postgres", "-c", f"SELECT 1 FROM pg_database WHERE datname = '{config['database']}'"],
                     cwd=self.planka_dir,
                     capture_output=True,
@@ -228,7 +245,7 @@ class DatabaseDiagnostic:
                 if resultado["base_existe"]:
                     # Verificar se tabelas existem
                     result = subprocess.run(
-                        ["docker-compose", "exec", "-T", "postgres", "psql", "-U", config["user"], 
+                        ["docker-compose", "-f", docker_compose_file, "exec", "-T", "postgres", "psql", "-U", config["user"], 
                          "-d", config["database"], "-c", "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public'"],
                         cwd=self.planka_dir,
                         capture_output=True,
@@ -253,7 +270,7 @@ class DatabaseDiagnostic:
                     else:
                         resultado["erro"] = "Erro ao verificar tabelas"
             else:
-                resultado["erro"] = "PostgreSQL não está acessível"
+                resultado["erro"] = "PostgreSQL não está acessível via Docker"
                 
         except subprocess.TimeoutExpired:
             resultado["erro"] = "Timeout ao verificar conectividade"
@@ -274,9 +291,26 @@ class DatabaseDiagnostic:
         try:
             config = self.db_config.get_database_config()
             
+            # Determinar qual arquivo docker-compose usar
+            docker_compose_files = [
+                "docker-compose-dev.yml",
+                "docker-compose-local.yml", 
+                "docker-compose.yml"
+            ]
+            
+            docker_compose_file = None
+            for file in docker_compose_files:
+                if (self.planka_dir / file).exists():
+                    docker_compose_file = file
+                    break
+            
+            if not docker_compose_file:
+                resultado["erro"] = "Nenhum arquivo docker-compose encontrado"
+                return resultado
+            
             # Listar tabelas
             result = subprocess.run(
-                ["docker-compose", "exec", "-T", "postgres", "psql", "-U", config["user"], 
+                ["docker-compose", "-f", docker_compose_file, "exec", "-T", "postgres", "psql", "-U", config["user"], 
                  "-d", config["database"], "-c", """
                  SELECT table_name 
                  FROM information_schema.tables 
